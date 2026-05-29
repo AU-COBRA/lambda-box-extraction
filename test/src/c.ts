@@ -111,7 +111,11 @@ int main(int argc, char *argv[]) {
 export function compile_c(file: string, test: TestCase, timeout: number): string | ExecFailure {
   const f_out = replace_ext(file, ".o");
   const f_glue = "src/c/glue.c";
-  const cmd = `gcc -o ${f_out} -w -Wno-everything -O2 -fomit-frame-pointer -I\${C_RUNTIME_PATH} \${C_RUNTIME_PATH}/gc_stack.c ${file} ${f_glue} -xc -`;
+  // GCC 14+ promotes -Wint-conversion / -Wincompatible-pointer-types /
+  // -Wimplicit-function-declaration to errors by default; the legacy
+  // CertiRocq glue.c relies on the older permissive behaviour, so
+  // downgrade them back to warnings (which -w then silences).
+  const cmd = `gcc -o ${f_out} -w -Wno-error=int-conversion -Wno-error=incompatible-pointer-types -Wno-error=implicit-function-declaration -O2 -fomit-frame-pointer -I\${C_RUNTIME_PATH} \${C_RUNTIME_PATH}/gc_stack.c ${file} ${f_glue} -xc -`;
   // Generate main file
   const main = get_c_main(test);
 
