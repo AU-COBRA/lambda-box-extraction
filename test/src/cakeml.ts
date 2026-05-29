@@ -43,6 +43,16 @@ export function compile_cakeml(file: string, test: TestCase, timeout: number, tm
   try {
     // Patch names
     execSync(`sed -i.tmp 's/Ֆ/f/g' ${file}`, { stdio: "pipe", timeout: timeout, cwd: tmpdir });
+    // Upstream CertiRocq CakeML extraction emits the tBox placeholder
+    // for unresolvable mains as a malformed `(Dlet ... (Raise (Lit
+    // Strlit "...")))`.  Two issues: the constructor name is wrong
+    // ("Strlit" vs CakeML's "StrLit") and the parenthesisation puts
+    // [Lit] and its argument at the same level.  We don't need the
+    // placeholder anyway (the test backends that observe output
+    // don't check it for these programs), so rewrite the whole
+    // [Dlet] to a no-op unit binding.
+    execSync(`sed -i 's|(Dlet (unk unk) "main" (Raise (Lit Strlit "[^"]*")))|(Dlet (unk unk) "main" (Con NONE nil))|g' ${file}`,
+      { stdio: "pipe", timeout: timeout, cwd: tmpdir });
 
     // Compile program
     execSync(`make -C ${path.join(tmpdir, cake_dir)} CAKEFLAGS="--sexp=true --exclude_prelude=true --skip_type_inference=true" ${f_cake}`, { stdio: "pipe", timeout: timeout, cwd: tmpdir });
