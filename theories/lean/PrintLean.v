@@ -111,94 +111,7 @@ Definition lookup_ind_name (env : ind_env) (ind : inductive) : string :=
   | None => "MissingInd"
   end.
 
-(* ----- Term printer ----------------------------------------------- *)
-
-(* Every recursive call returns a string that names an [Obj]-typed
-   Lean expression.  We achieve this by wrapping each emitted term
-   in [Peregrine.reflect] (idempotent at runtime).  This eliminates
-   the bookkeeping of where conversions are required. *)
-Fixpoint print_lterm (full_names : bool) (default_module : string) (env : ind_env) (t : lterm) : string :=
-  let reflect s := "(Peregrine.reflect " ++ s ++ ")" in
-  match t with
-  | LVar id => reflect id
-  | LConst kn => reflect (pick_fun_name full_names default_module kn)
-  | LCtor ind idx args =>
-    let cn := lookup_ctor_name env ind idx in
-    let ind_n := lookup_ind_name env ind in
-    let body :=
-      match args with
-      | [] => "(." ++ cn ++ " : " ++ ind_n ++ ")"
-      | _ =>
-        "((" ++ ind_n ++ "." ++ cn ++ ") "
-          ++ concat_with " " (List.map (print_lterm full_names default_module env) args) ++ ")"
-      end in
-    reflect body
-  | LProj p discr =>
-    let ind := p.(proj_ind) in
-    let arg := p.(proj_arg) in
-    let cn := lookup_ctor_name env ind 0 in
-    let nargs :=
-      match lookup_oib env ind with
-      | Some oib =>
-        match nth_error oib.(EAst.ind_ctors) 0 with
-        | Some cb => cb.(EAst.cstr_nargs)
-        | None => 0
-        end
-      | None => 0
-      end in
-    let mk_pat (i : nat) :=
-      if Nat.eqb i arg then "x" else "_" in
-    let pat_args :=
-      let fix aux (i : nat) :=
-        match i with
-        | O => []
-        | S k => mk_pat (nargs - i) :: aux k
-        end in
-      aux nargs in
-    reflect ("(match (Peregrine.cast " ++ print_lterm full_names default_module env discr
-      ++ " : " ++ lookup_ind_name env ind ++ ") with | ." ++ cn ++ " "
-      ++ concat_with " " pat_args ++ " => x)")
-  | LApp f x =>
-    reflect ("(Peregrine.apply " ++ print_lterm full_names default_module env f
-      ++ " " ++ print_lterm full_names default_module env x ++ ")")
-  | LLam id body =>
-    reflect ("(fun (" ++ id ++ " : Obj) => " ++ print_lterm full_names default_module env body ++ ")")
-  | LLet id b body =>
-    reflect ("(let " ++ id ++ " : Obj := " ++ print_lterm full_names default_module env b ++ "; "
-      ++ print_lterm full_names default_module env body ++ ")")
-  | LCase discr ind brs =>
-    let ind_n := lookup_ind_name env ind in
-    let print_br (i : nat) (br : list ident * lterm) : string :=
-      let '(ids, body) := br in
-      let cn := lookup_ctor_name env ind i in
-      "  | ." ++ cn
-        ++ (match ids with [] => "" | _ => " " ++ concat_with " " ids end)
-        ++ " => " ++ print_lterm full_names default_module env body in
-    let fix print_brs (i : nat) (bs : list (list ident * lterm)) : list string :=
-      match bs with
-      | [] => []
-      | b :: rest => print_br i b :: print_brs (S i) rest
-      end in
-    match brs with
-    | [] =>
-      (* Match on an empty inductive (e.g. an [Empty]/[False] left
-         over from erasure).  We still elaborate the discriminant for
-         its effects, then evaluate to the placeholder [()] — these
-         expressions are unreachable in well-typed programs. *)
-      reflect ("(let _ : Obj := " ++ print_lterm full_names default_module env discr ++ "; ())")
-    | _ =>
-      reflect ("(match (Peregrine.cast " ++ print_lterm full_names default_module env discr ++ " : "
-        ++ ind_n ++ ") with" ++ nl
-        ++ concat_with nl (print_brs 0 brs) ++ nl ++ ")")
-    end
-  | LPanic _ =>
-    (* Stand-in Obj for computationally irrelevant terms (tBox
-       replacements, unsupported nested tFix).  A well-typed program
-       should never inspect such a value at runtime. *)
-    reflect "()"
-  end.
-
-(* ----- Top-level declaration printer ------------------------------ *)
+(* ----- Inductive declaration printer (context-free) --------------- *)
 
 Definition print_ctor (cb : EAst.constructor_body) : string :=
   let nargs := cb.(EAst.cstr_nargs) in
@@ -219,36 +132,177 @@ Definition print_inductive (mib : EAst.mutual_inductive_body) : string :=
       ++ "end"
   end.
 
-Definition print_lfun (full_names : bool) (default_module : string) (env : ind_env) (name : string) (f : lfun) : string :=
-  "unsafe def " ++ name ++ " "
-    ++ concat_with " " (List.map (fun id => "(" ++ id ++ " : Obj)") f.(lfun_params))
-    ++ " : Obj :=" ++ nl
-    ++ "  " ++ print_lterm full_names default_module env f.(lfun_body).
+(* ----- Term / declaration printer --------------------------------- *)
 
-Definition print_decl (full_names : bool) (default_module : string) (env : ind_env) (kn : kername) (d : ldecl) : string :=
-  match d with
-  | LInductive mib => print_inductive mib
-  | LDef f => print_lfun full_names default_module env (pick_fun_name full_names default_module kn) f
-  | LRecGroup fs =>
-    "mutual" ++ nl
-      ++ concat_with nl (List.map (fun '(kn', f) =>
-           print_lfun full_names default_module env (pick_fun_name full_names default_module kn') f) fs) ++ nl
-      ++ "end"
-  end.
+Section Printer.
+  (* Invariant context, shared by every printer below. *)
+  Context (full_names : bool) (default_module : string) (env : ind_env)
+          (thunks : list kername).
+
+  (* Nullary top-level constants are emitted as memoized [Thunk Obj]
+     (see [print_lfun]); references to them must force via [.get]. *)
+  Definition is_thunk (kn : kername) : bool :=
+    List.existsb (fun k => eq_kername k kn) thunks.
+
+  (* Every recursive call returns a string that names an [Obj]-typed
+     Lean expression, achieved by wrapping each emitted term in
+     [Peregrine.reflect] (idempotent at runtime). *)
+  Fixpoint print_lterm (t : lterm) : string :=
+    let reflect s := "(Peregrine.reflect " ++ s ++ ")" in
+    match t with
+    | LVar id => reflect id
+    | LConst kn =>
+      let nm := pick_fun_name full_names default_module kn in
+      if is_thunk kn then reflect (nm ++ ".get") else reflect nm
+    | LCtor ind idx args =>
+      let cn := lookup_ctor_name env ind idx in
+      let ind_n := lookup_ind_name env ind in
+      let body :=
+        match args with
+        | [] => "(." ++ cn ++ " : " ++ ind_n ++ ")"
+        | _ =>
+          "((" ++ ind_n ++ "." ++ cn ++ ") "
+            ++ concat_with " " (List.map print_lterm args) ++ ")"
+        end in
+      reflect body
+    | LProj p discr =>
+      let ind := p.(proj_ind) in
+      let arg := p.(proj_arg) in
+      let cn := lookup_ctor_name env ind 0 in
+      let nargs :=
+        match lookup_oib env ind with
+        | Some oib =>
+          match nth_error oib.(EAst.ind_ctors) 0 with
+          | Some cb => cb.(EAst.cstr_nargs)
+          | None => 0
+          end
+        | None => 0
+        end in
+      let mk_pat (i : nat) :=
+        if Nat.eqb i arg then "x" else "_" in
+      let pat_args :=
+        let fix aux (i : nat) :=
+          match i with
+          | O => []
+          | S k => mk_pat (nargs - i) :: aux k
+          end in
+        aux nargs in
+      reflect ("(match (Peregrine.cast " ++ print_lterm discr
+        ++ " : " ++ lookup_ind_name env ind ++ ") with | ." ++ cn ++ " "
+        ++ concat_with " " pat_args ++ " => x)")
+    | LApp f x =>
+      reflect ("(Peregrine.apply " ++ print_lterm f ++ " " ++ print_lterm x ++ ")")
+    | LLam id body =>
+      reflect ("(fun (" ++ id ++ " : Obj) => " ++ print_lterm body ++ ")")
+    | LLet id b body =>
+      reflect ("(let " ++ id ++ " : Obj := " ++ print_lterm b ++ "; "
+        ++ print_lterm body ++ ")")
+    | LCase discr ind brs =>
+      let ind_n := lookup_ind_name env ind in
+      let print_br (i : nat) (br : list ident * lterm) : string :=
+        let '(ids, body) := br in
+        let cn := lookup_ctor_name env ind i in
+        "  | ." ++ cn
+          ++ (match ids with [] => "" | _ => " " ++ concat_with " " ids end)
+          ++ " => " ++ print_lterm body in
+      let fix print_brs (i : nat) (bs : list (list ident * lterm)) : list string :=
+        match bs with
+        | [] => []
+        | b :: rest => print_br i b :: print_brs (S i) rest
+        end in
+      match brs with
+      | [] =>
+        (* Match on an empty inductive (e.g. an [Empty]/[False] left
+           over from erasure).  We still elaborate the discriminant for
+           its effects, then evaluate to the placeholder [()] — these
+           expressions are unreachable in well-typed programs. *)
+        reflect ("(let _ : Obj := " ++ print_lterm discr ++ "; ())")
+      | _ =>
+        reflect ("(match (Peregrine.cast " ++ print_lterm discr ++ " : "
+          ++ ind_n ++ ") with" ++ nl
+          ++ concat_with nl (print_brs 0 brs) ++ nl ++ ")")
+      end
+    | LFix entries _ =>
+      match entries with
+      | [(name, body)] =>
+        (* Singleton nested fix → term-mode [let rec].  The block's value
+           is the (curried [Obj]-valued) function [name]; callers reach it
+           through [Peregrine.apply].  Lean's [let rec] captures enclosing
+           binders natively, so no closure parameters are threaded. *)
+        reflect ("(let rec " ++ name ++ " : Obj :=" ++ nl
+          ++ "     " ++ print_lterm body ++ nl
+          ++ "   " ++ name ++ ")")
+      | _ =>
+        (* Mutual nested fix: term-mode [let rec] has no [and] clause, and
+           no current program needs it.  Fail loudly at first touch rather
+           than emitting a silent placeholder. *)
+        reflect "(panic! ""peregrine: mutual nested fix unsupported"")"
+      end
+    | LPanic _ =>
+      (* Stand-in Obj for computationally irrelevant terms (tBox
+         replacements).  A well-typed program should never inspect such a
+         value at runtime. *)
+      reflect "()"
+    end.
+
+  (* Nullary constants become memoized [Thunk Obj]: a plain nullary def
+     is evaluated during module initialization, on the process's small
+     pre-[main] stack (deep recursion there is a hard SIGSEGV).  As a
+     [Thunk] the body runs on first [.get] — inside [main], on the Lean
+     runtime's big-stack thread — while preserving evaluate-once sharing. *)
+  Definition print_lfun (name : string) (f : lfun) : string :=
+    match f.(lfun_params) with
+    | [] =>
+      "unsafe def " ++ name ++ " : Thunk Obj := Thunk.mk (fun _ =>" ++ nl
+        ++ "  " ++ print_lterm f.(lfun_body) ++ ")"
+    | params =>
+      "unsafe def " ++ name ++ " "
+        ++ concat_with " " (List.map (fun id => "(" ++ id ++ " : Obj)") params)
+        ++ " : Obj :=" ++ nl
+        ++ "  " ++ print_lterm f.(lfun_body)
+    end.
+
+  Definition print_decl (kn : kername) (d : ldecl) : string :=
+    match d with
+    | LInductive mib => print_inductive mib
+    | LDef f => print_lfun (pick_fun_name full_names default_module kn) f
+    | LRecGroup fs =>
+      "mutual" ++ nl
+        ++ concat_with nl (List.map (fun '(kn', f) =>
+             print_lfun (pick_fun_name full_names default_module kn') f) fs) ++ nl
+        ++ "end"
+    end.
+
+End Printer.
 
 Definition preamble (ns : string) : string :=
   "-- Generated by Peregrine" ++ nl
     ++ "import Peregrine.Runtime" ++ nl
     ++ "open Peregrine" ++ nl
+    (* Closed programs bake in numeric literals as deep [S_] towers;
+       elaborating them exceeds Lean's default recursion depth. *)
+    ++ "set_option maxRecDepth 1000000" ++ nl
     ++ nl
     ++ "namespace " ++ ns ++ nl.
 
 Definition postamble (ns : string) : string :=
   nl ++ "end " ++ ns ++ nl.
 
+(* Knames of nullary [LDef]s — the constants emitted as [Thunk Obj]
+   and therefore referenced via [.get]. *)
+Definition thunk_knames (decls : list (kername * ldecl)) : list kername :=
+  Utils.filter_map (fun (x : kername * ldecl) =>
+    let '(kn, d) := x in
+    match d with
+    | LDef f => match f.(lfun_params) with [] => Some kn | _ => None end
+    | _ => None
+    end
+  ) decls.
+
 Definition print_program (full_names : bool) (default_module : string) (ns : string) (p : lprogram) : string :=
   let env := build_ind_env p.(ldecls) in
+  let thunks := thunk_knames p.(ldecls) in
   preamble ns
     ++ concat_with (nl ++ nl)
-         (List.map (fun '(kn, d) => print_decl full_names default_module env kn d) p.(ldecls))
+         (List.map (fun '(kn, d) => print_decl full_names default_module env thunks kn d) p.(ldecls))
     ++ postamble ns.

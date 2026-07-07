@@ -13,8 +13,18 @@
 namespace Peregrine
 
 /-- Universal "object" type for extracted values.  All emitted Lean
-    inductives are wrappers around this type. -/
+    inductives are wrappers around this type.
+
+    The fieldless `scalar` constructor is never built; it exists solely
+    to make the Lean compiler classify `Obj` as *may-be-scalar*, so it
+    emits **checked** refcount ops (`lean_dec`/`lean_inc`) instead of
+    the unchecked `lean_dec_ref`/`lean_inc_ref`.  Without it, values
+    `unsafeCast` into `Obj` from fieldless source constructors (e.g.
+    `nat.O` = `lean_box(0)`, a scalar) would be dereferenced through
+    their absent header on the first RC op — a SIGSEGV in compiled code
+    (the interpreter never specializes RC ops, so it is unaffected). -/
 unsafe inductive Obj : Type
+  | scalar
   | mk : (Unit → Obj) → Obj
 
 /-- Reinterpret an `Obj` at any concrete type.  Sound when the `Obj`

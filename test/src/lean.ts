@@ -62,13 +62,19 @@ function pp_call(type: ProgramType): string | undefined {
 // the import.
 function append_main(file: string, test: TestCase) {
   const printer = pp_call(test.output_type);
-  const target = `Generated.${test.main}`;
+  const original = readFileSync(file, "utf8");
+
+  // Nullary constants are emitted as `Thunk Obj` (evaluated lazily on
+  // first `.get`, inside `main`, rather than at module init); force
+  // such an entry point with `.get`. A function-valued entry stays as
+  // is.
+  const isThunk = new RegExp(`def\\s+${test.main}\\s*:\\s*Thunk\\b`).test(original);
+  const target = isThunk ? `Generated.${test.main}.get` : `Generated.${test.main}`;
 
   const main_body = printer === undefined
     ? `let _ := ${target}; pure ()`
     : `IO.println (${printer} ${target})`;
 
-  const original = readFileSync(file, "utf8");
   const patched = original.replace(
     "import Peregrine.Runtime",
     "import Peregrine.Runtime\nimport Peregrine.TestPrinters",
@@ -85,12 +91,24 @@ export function run_lean(file: string, projectdir: string, test: TestCase, timeo
   try {
     append_main(file, test);
 
-    const rel = path.relative(projectdir, file);
+    // Build and run a NATIVE executable (compiled mode).  Compiled Lean
+    // specializes refcount ops and evaluates nullary constants at module
+    // init — behaviors the interpreter (`lake env lean --run`) never
+    // exercises, and which previously hid a whole class of backend bugs
+    // (unchecked RC on scalar `Obj`, init-time deep recursion).  We copy
+    // the generated program to the exe root module `Main.lean`, build the
+    // `testexe` target, and run the binary.
+    const mainFile = path.join(projectdir, "Main.lean");
+    copyFileSync(file, mainFile);
+
     const start_main = Date.now();
-    // -Dlinter.unusedVariables=false: silence linter warnings the
-    // generated code triggers (unused inductive parameters, erased
-    // type arguments), which would otherwise pollute stdout.
-    const res = execSync(`lake env lean -Dlinter.unusedVariables=false --run ${rel}`, {
+    execSync(`lake build testexe`, {
+      stdio: "pipe",
+      timeout: timeout,
+      cwd: projectdir,
+      encoding: "utf8",
+    });
+    const res = execSync(`./.lake/build/bin/testexe`, {
       stdio: "pipe",
       timeout: timeout,
       cwd: projectdir,

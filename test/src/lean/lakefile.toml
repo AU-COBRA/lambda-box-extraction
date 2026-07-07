@@ -5,3 +5,11 @@ defaultTargets = ["Peregrine"]
 [[lean_lib]]
 name = "Peregrine"
 roots = ["Peregrine.Runtime", "Peregrine.TestPrinters"]
+
+# Compiled-mode test executable: the harness copies each generated
+# program to Main.lean and builds a native binary, so that RC-op and
+# module-initialization bugs (invisible to the interpreter) are caught.
+[[lean_exe]]
+name = "testexe"
+root = "Main"
+moreLeanArgs = ["-Dlinter.unusedVariables=false"]

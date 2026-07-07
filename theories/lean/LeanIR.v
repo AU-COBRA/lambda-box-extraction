@@ -31,6 +31,13 @@ Inductive lterm : Set :=
             -> inductive (* discriminant inductive *)
             -> list (list ident * lterm) (* branches, indexed by ctor idx *)
             -> lterm
+(* A nested (non-top-level) fixpoint.  Each entry is [(name, body)]
+   where [body] is the compiled def body *with* its leading lambdas
+   (printed as a term-mode [let rec name : Obj := body]).  The [nat]
+   selects which mutual component this fix denotes.  Emitted only for
+   fixes that appear as subterms; top-level fixpoints are handled by
+   [compile_constant_body] and become [LDef]/[LRecGroup]. *)
+| LFix    : list (ident * lterm) -> nat -> lterm
 | LPanic  : string -> lterm.
 
 Record lfun := mkLFun {

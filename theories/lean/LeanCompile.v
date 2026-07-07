@@ -58,6 +58,24 @@ Fixpoint push_vars (ids : list ident) (c : ctx) : ctx :=
   | id :: rest => push_vars rest (LVar id :: c)
   end.
 
+(* [implement_box] replaces each erased proof/type [□] with a canonical
+   self-looping fixpoint [fix f x1..xn := f] (dname usually "reccall").
+   Such a value is never forced — it only occupies an erased argument
+   slot — so we keep emitting the cheap [()] placeholder for it instead
+   of a real [let rec], which also avoids a [let rec]-per-type-argument
+   blowup.  Shape test: a singleton fix whose body, after peeling [n]
+   lambdas, is exactly the self-reference [tRel n]. *)
+Definition is_selfloop_fix (defs : list (EAst.def EAst.term)) : bool :=
+  match defs with
+  | [d] =>
+    let '(params, body) := peel_lambdas d.(EAst.dbody) in
+    match body with
+    | EAst.tRel k => Nat.eqb k (List.length params)
+    | _ => false
+    end
+  | _ => false
+  end.
+
 Fixpoint compile_term (c : ctx) (t : EAst.term) {struct t} : lterm :=
   match t with
   | EAst.tBox => LPanic "tBox should have been erased by implement_box"
@@ -86,8 +104,25 @@ Fixpoint compile_term (c : ctx) (t : EAst.term) {struct t} : lterm :=
     LCase discr' ind brs'
   | EAst.tProj p discr =>
     LProj p (compile_term c discr)
-  | EAst.tFix _ _ =>
-    LPanic "nested tFix not yet supported"
+  | EAst.tFix defs idx =>
+    if is_selfloop_fix defs then
+      (* erased [□]; never inspected *)
+      LPanic "erased box (self-loop fix)"
+    else
+    (* Nested fixpoint (a fix appearing as a subterm — typically an
+       inlined recursive helper).  Compile it to an [LFix], which the
+       printer emits as a term-mode [let rec].  Each mutual binder maps
+       to [LVar name]; MetaCoq orders them so [tRel 0] is the *last*
+       def, hence [mut_ctx] reverses [names].  Enclosing binders are
+       captured by Lean's [let rec] directly, so no closure lifting is
+       needed. *)
+    let base := List.length c in
+    let names := List.map (fun d => ident_of_name base d.(EAst.dname)) defs in
+    let mut_ctx := List.rev (List.map (fun nm => LVar nm) names) in
+    let c1 := List.app mut_ctx c in
+    let entries := List.map (fun d =>
+      (ident_of_name base d.(EAst.dname), compile_term c1 d.(EAst.dbody))) defs in
+    LFix entries idx
   | EAst.tCoFix _ _ =>
     LPanic "tCoFix unsupported"
   | EAst.tPrim _ =>
