@@ -27,25 +27,61 @@ Definition concat_with (sep : string) (xs : list string) : string :=
    limitation, controlled by [lean_print_full_names]. *)
 Definition local_name (kn : kername) : string := snd kn.
 
-(* Flat full name: [default_module ++ "_" ++ snd kn].  [default_module]
-   is the source file basename, supplied by the CLI driver.  We
-   deliberately ignore the kernel modpath: across frontends the
-   modpath ranges from empty (lean-to-lambdabox) to deep
-   ([Peregrine.Tests.Demo] for rocq extractions), which would
-   yield inconsistent emitted names across otherwise-identical
-   programs.  Tests expect [<File>_<ident>], so we anchor on the
-   file name.  External-module references in the same program are
-   currently rare because erasure inlines library types into local
-   copies; if collisions ever arise, switch this to fold a
-   one-component summary of [fst kn]. *)
-Definition full_name (default_module : string) (kn : kername) : string :=
-  match default_module with
-  | "" => snd kn
-  | _ => default_module ++ "_" ++ snd kn
+(* Inner-module qualifiers of a modpath: everything below the file root.
+   [MPfile] contributes nothing (its dirpath is the compilation-unit name,
+   already covered by [default_module]); [MPdot]/[MPbound] components are
+   folded in order.  Rationale: names anchored only on [snd kn] collide as
+   soon as a program uses same-named definitions from different modules
+   (e.g. FMap [M.add] vs FSet [S.add] vs [Nat.add] in VeriStar), which
+   previously emitted duplicate [unsafe def]s.  Top-level definitions keep
+   their historical [<File>_<ident>] names. *)
+Fixpoint mp_quals (mp : modpath) : list ident :=
+  match mp with
+  | MPfile _ => []
+  | MPbound _ id _ => [id]
+  | MPdot mp id => mp_quals mp ++ [id]
   end.
 
-Definition pick_fun_name (full : bool) (default_module : string) (kn : kername) : string :=
-  if full then full_name default_module kn else local_name kn.
+Definition qualify_mp (mp : modpath) (s : ident) : ident :=
+  match mp_quals mp with
+  | [] => s
+  | qs => concat_with "_" qs ++ "_" ++ s
+  end.
+
+(* File root of a modpath (innermost dirpath component = file name),
+   used as a last-resort disambiguator when [qualify_mp] alone still
+   collides (same-named top-level defs in different files, e.g.
+   [Corelib.Init.Nat.add] vs a program's own [add]). *)
+Fixpoint mp_root_file (mp : modpath) : list ident :=
+  match mp with
+  | MPfile dp | MPbound dp _ _ => match dp with f :: _ => [f] | [] => [] end
+  | MPdot mp _ => mp_root_file mp
+  end.
+
+Definition base_name (kn : kername) : string := qualify_mp (fst kn) (snd kn).
+
+Definition disamb_name (kn : kername) : string :=
+  concat_with "_" (mp_root_file (fst kn) ++ mp_quals (fst kn) ++ [snd kn]).
+
+(* Flat full name: [default_module ++ "_" ++ <quals> ++ snd kn], where
+   the file root is folded in only for names in [dups] (the base names
+   that appear more than once in this program — computed by
+   [print_program]).  [default_module] is the source file basename,
+   supplied by the CLI driver.  We deliberately ignore the [MPfile] root
+   otherwise: across frontends it ranges from empty (lean-to-lambdabox)
+   to deep ([Peregrine.Tests.Demo] for rocq extractions), which would
+   yield inconsistent emitted names across otherwise-identical programs.
+   Tests expect [<File>_<ident>], so we anchor on the file name. *)
+Definition full_name (dups : list string) (default_module : string) (kn : kername) : string :=
+  let base := base_name kn in
+  let base := if List.existsb (String.eqb base) dups then disamb_name kn else base in
+  match default_module with
+  | "" => base
+  | _ => default_module ++ "_" ++ base
+  end.
+
+Definition pick_fun_name (dups : list string) (full : bool) (default_module : string) (kn : kername) : string :=
+  if full then full_name dups default_module kn else local_name kn.
 
 (* Suffix inductive / constructor names with [_] so we never collide
    with Lean keywords (e.g. [true], [false], [Nat]). *)
@@ -105,9 +141,13 @@ Definition lookup_ctor_name (env : ind_env) (ind : inductive) (n : nat) : string
   | None => "MissingInd_" ++ string_of_nat n
   end.
 
+(* Inductive type names get the same inner-module qualification as
+   definitions: e.g. FMap [M.t] and FSet [S.t] would otherwise both
+   print as [t_]. *)
 Definition lookup_ind_name (env : ind_env) (ind : inductive) : string :=
   match lookup_oib env ind with
-  | Some oib => ind_name (oib.(EAst.ind_name))
+  | Some oib =>
+    ind_name (qualify_mp (fst ind.(inductive_mind)) (oib.(EAst.ind_name)))
   | None => "MissingInd"
   end.
 
@@ -119,25 +159,26 @@ Definition print_ctor (cb : EAst.constructor_body) : string :=
   "  | " ++ ctor_name (cb.(EAst.cstr_name))
     ++ (match ids with [] => "" | _ => " " ++ params_group ids end).
 
-Definition print_one_inductive (oib : EAst.one_inductive_body) : string :=
-  "unsafe inductive " ++ ind_name (oib.(EAst.ind_name)) ++ " where" ++ nl
+Definition print_one_inductive (mp : modpath) (oib : EAst.one_inductive_body) : string :=
+  "unsafe inductive " ++ ind_name (qualify_mp mp (oib.(EAst.ind_name))) ++ " where" ++ nl
     ++ concat_with nl (List.map print_ctor (oib.(EAst.ind_ctors))).
 
-Definition print_inductive (mib : EAst.mutual_inductive_body) : string :=
+Definition print_inductive (kn : kername) (mib : EAst.mutual_inductive_body) : string :=
   match mib.(EAst.ind_bodies) with
-  | [oib] => print_one_inductive oib
+  | [oib] => print_one_inductive (fst kn) oib
   | bodies =>
     "mutual" ++ nl
-      ++ concat_with nl (List.map print_one_inductive bodies) ++ nl
+      ++ concat_with nl (List.map (print_one_inductive (fst kn)) bodies) ++ nl
       ++ "end"
   end.
 
 (* ----- Term / declaration printer --------------------------------- *)
 
 Section Printer.
-  (* Invariant context, shared by every printer below. *)
-  Context (full_names : bool) (default_module : string) (env : ind_env)
-          (thunks : list kername).
+  (* Invariant context, shared by every printer below.  [dups] is the set
+     of base names that collide in this program (see [full_name]). *)
+  Context (dups : list string) (full_names : bool) (default_module : string)
+          (env : ind_env) (thunks : list kername).
 
   (* Nullary top-level constants are emitted as memoized [Thunk Obj]
      (see [print_lfun]); references to them must force via [.get]. *)
@@ -152,7 +193,7 @@ Section Printer.
     match t with
     | LVar id => reflect id
     | LConst kn =>
-      let nm := pick_fun_name full_names default_module kn in
+      let nm := pick_fun_name dups full_names default_module kn in
       if is_thunk kn then reflect (nm ++ ".get") else reflect nm
     | LCtor ind idx args =>
       let cn := lookup_ctor_name env ind idx in
@@ -264,12 +305,12 @@ Section Printer.
 
   Definition print_decl (kn : kername) (d : ldecl) : string :=
     match d with
-    | LInductive mib => print_inductive mib
-    | LDef f => print_lfun (pick_fun_name full_names default_module kn) f
+    | LInductive mib => print_inductive kn mib
+    | LDef f => print_lfun (pick_fun_name dups full_names default_module kn) f
     | LRecGroup fs =>
       "mutual" ++ nl
         ++ concat_with nl (List.map (fun '(kn', f) =>
-             print_lfun (pick_fun_name full_names default_module kn') f) fs) ++ nl
+             print_lfun (pick_fun_name dups full_names default_module kn') f) fs) ++ nl
         ++ "end"
     end.
 
@@ -299,10 +340,28 @@ Definition thunk_knames (decls : list (kername * ldecl)) : list kername :=
     end
   ) decls.
 
+(* Kernames of every printed definition (mutual-group members included). *)
+Definition printed_knames (decls : list (kername * ldecl)) : list kername :=
+  List.concat (List.map (fun (x : kername * ldecl) =>
+    let '(kn, d) := x in
+    match d with
+    | LRecGroup fs => List.map fst fs
+    | LInductive _ => []
+    | _ => [kn]
+    end) decls).
+
+(* Base names occurring more than once — these get the file-root
+   disambiguator in [full_name]. *)
+Definition dup_base_names (decls : list (kername * ldecl)) : list string :=
+  let names := List.map base_name (printed_knames decls) in
+  List.filter (fun n =>
+    Nat.ltb 1 (List.length (List.filter (String.eqb n) names))) names.
+
 Definition print_program (full_names : bool) (default_module : string) (ns : string) (p : lprogram) : string :=
   let env := build_ind_env p.(ldecls) in
   let thunks := thunk_knames p.(ldecls) in
+  let dups := dup_base_names p.(ldecls) in
   preamble ns
     ++ concat_with (nl ++ nl)
-         (List.map (fun '(kn, d) => print_decl full_names default_module env thunks kn d) p.(ldecls))
+         (List.map (fun '(kn, d) => print_decl dups full_names default_module env thunks kn d) p.(ldecls))
     ++ postamble ns.
