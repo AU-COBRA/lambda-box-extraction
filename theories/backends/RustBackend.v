@@ -28,7 +28,7 @@ Definition rust_phases := {|
   implement_lazy_c := Compatible false;
   cofix_to_laxy_c  := Compatible false;
   betared_c        := Compatible false;
-  unboxing_c       := Compatible false;
+  unboxing_c       := Compatible true;
   dearg_ctors_c    := Compatible true;
   dearg_consts_c   := Compatible true;
 |}.
