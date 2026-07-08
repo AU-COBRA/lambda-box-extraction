@@ -37,3 +37,8 @@ done
 find dist/. -type f -name "*.txt" -delete
 find dist-typed/. -type f -name "*.txt" -delete
 ```
+
+## Directory
+* [src/](src/): Test runner source code
+* [rocq/](rocq/): Rocq test programs
+* [lean/](lean/): Lean test programs
