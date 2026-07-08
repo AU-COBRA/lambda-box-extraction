@@ -1,58 +1,83 @@
-# Project structure
-* [theories/](/theories/) Coq sources defining the extraction pipeline
-* [theories/serialization](/theories/serialization/) Verified s-expression serialization of $\lambda_\square$ programs
-* [src/extraction/](/src/extraction/) Extracted OCaml code
-* [src/printC/](/src/printC/) OCaml library for printing Clight, from [CertiRocq](https://github.com/CertiRocq/certirocq/tree/master/plugin/static)
-* [bin/](/bin/) OCaml source files defining command line interface
-* [test/](/test/) Test suite and test runner
-* [test/agda](/test/agda/) Tests from the agda2lambox tool
+# Local dev environemnt setup
+## Requirements
+To install Peregrine dependencies either [opam](http://opam.ocaml.org/) or [Nix](https://nixos.org/) package managers are recommended.
 
-# Dev environment setup
+To build the Peregrine Haskell libary GHC and cabal are required.
+
+Additionally, Lean, Node.JS, cargo, rustc, and gcc are required to run the test suite.
+
+## Getting sources
+To checkout the Peregrine source code:
 ```bash
 git clone https://github.com/peregrine-project/peregrine-tool.git
 cd peregrine-tool
-opam switch create . 4.14.2 --repositories default,coq-released=https://coq.inria.fr/opam/released
+```
+
+## Installing using `opam`
+First set up a fresh `opam` environment for Peregrine
+```bash
+opam switch create peregrine --packages="ocaml-variants.4.14.2+options,ocaml-option-flambda"
 eval $(opam env)
+opam repo add rocq-released https://rocq-prover.org/opam/released
+```
+
+To install dependencies run:
+```bash
 opam install . --deps-only
 ```
 
-The project can be built with `make`.
-Running the dev executable with `dune exec peregrine`.
+## Installing using `Nix`
+```bash
+nix-shell --argstr bundle 9.1 --argstr job Peregrine
+```
+
+## Building and running Peregrine
+Once dependencies have been installed you can build Peregrine with `make`.
+The dev CLI can be launched with `dune exec peregrine -- <ARGS>`.
+
+### Make targets
+| | |
+|------------------|--------------------------|
+| `make`           | Build Rocq sources, CLI, and Rocq frontend |
+| `make theory`    | Build Rocq sources |
+| `make mllib`     | Build Peregrine CLI |
+| `make hs-lib`    | Build Peregrine Haskell library |
+| `make test`      | Run test suite |
+| `make install`   | Install Peregrine |
+| `make uninstall` | Uninstall Peregrine |
+| `make clean`     | Clean compiled and generated files |
+
+# Running tests
+The test suite is a TypeScript runner that drives peregrine against pre-extracted Rocq, Lean, and Agda fixtures, compiles the output with the relevant external tool, and checks the result. From the repo root:
+
+```bash
+make test
+```
+
+To generate the test files see [`test/README.md`](/test/README.md).
+
+For benchmark suite see [benchmarks](https://github.com/peregrine-project/benchmarks).
 
 
-# Coq Extractions
-## Pipeline
-![extraction](pipeline.png)
+# Project structure
+This repository contains:
+* The source code for the Peregrine middle-end written in Rocq
+* A command-line interface for Peregrine written in OCaml. The interface is a wrapper on top of the extracted middle-end Rocq code.
+* A Rocq frontend for Peregrine
+* A Haskell library containing Peregrine definitions, printers, and parsers for interfacing with Peregrine
+* A test suite for Peregrine
 
-## Translations
-* Coq -> $\lambda_{CIC}$
-  * Quote function (Coq -> Coq AST) implemented in OCaml: https://github.com/MetaCoq/metacoq/blob/coq-8.20/template-coq/src/run_template_monad.ml#L442
-  * Translation from Coq AST -> $\lambda_{CIC}$: https://github.com/MetaCoq/metacoq/blob/coq-8.20/template-pcuic/theories/TemplateToPCUIC.v
-  * Coq AST definition: https://github.com/MetaCoq/metacoq/blob/coq-8.20/template-coq/theories/Ast.v
-  * $\lambda_{CIC}$ definition: https://github.com/MetaCoq/metacoq/blob/coq-8.20/pcuic/theories/PCUICAst.v
-* $\lambda_{CIC}$ -> $\lambda_{\square}$
-  * Translation: https://github.com/MetaCoq/metacoq/blob/coq-8.20/erasure-plugin/theories/ETransform.v
-  * $\lambda_{\square}$ definition: https://github.com/MetaCoq/metacoq/blob/coq-8.20/erasure/theories/EAst.v
-* $\lambda_{CIC}$ -> $\lambda_{\square}^T$
-  * Translation: https://github.com/MetaCoq/metacoq/blob/coq-8.20/erasure/theories/Typed/Erasure.v#L1505
-  * $\lambda_{\square}^T$ definition: https://github.com/MetaCoq/metacoq/blob/coq-8.20/erasure/theories/Typed/ExAst.v
-* $\lambda_{\square}$ -> $\lambda_{ANF}$
-  * https://github.com/CertiRocq/certirocq/wiki/The-CertiRocq-pipeline
-  * AST: https://github.com/CertiRocq/certirocq/blob/master/theories/LambdaANF/cps.v
-* $\lambda_{\square}^T$ -> Rust
-  * Printing: https://github.com/peregrine-project/rocq-typed-extraction/blob/master/elm/theories/RustExtract.v
-* $\lambda_{\square}^T$ -> Elm
-  * Printing: https://github.com/peregrine-project/rocq-typed-extraction/blob/master/rust/theories/ElmExtract.v
-* $\lambda_{ANF}$ -> Clight
-* $\lambda_{ANF}$ -> WASM
-  * https://github.com/womeier/certicoqwasm/blob/master/theories/CodegenWasm/LambdaANF_to_Wasm.v
+## Directory layout
+See the README in each subdirectory for more details.
 
-## Examples
-* Rust
-  * https://github.com/peregrine-project/rocq-typed-extraction/tree/master/tests/theories
-* Elm
-  * https://github.com/peregrine-project/rocq-typed-extraction/tree/master/tests/theories
-* WASM
-  * https://github.com/womeier/certicoqwasm-testing
-* C (Clight)
-  * https://github.com/CertiRocq/certirocq/blob/master/benchmarks/tests.v
+| Path | Contents |
+|------|----------|
+| [thories/](/theories/) | Rocq sources for Peregrine |
+| [src/](/src/) | Extracted OCaml code from Rocq sources |
+| [bin/](/bin/) | OCaml sources defining the Peregrine command-line interface |
+| [plugin/](/plugin/) | Peregrine frontend for Rocq |
+| [hs-lib/](/hs-lib/) | Haskell library extracted from Rocq sources, contains the $\lambda_\square$ and Peregrine configuration definitions and verified printers/parsers |
+| [test/](/test/) | Test suite |
+| [doc/](/doc/) | Documentation |
+| [.github/](/.github/) | GitHub CI |
+| [.nix/](/.nix/) | Nix package configuration for Peregrine |
