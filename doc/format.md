@@ -305,7 +305,7 @@ The generated module starts with `module <elm_module_name> exposing (..)` follow
 #### C / Wasm (`certirocq_config`)
 ```
 (certirocq_config
-  <direct>     ; true   — use the direct (ANF) pipeline; the --cps CLI flag sets this to false (CPS pipeline)
+  <direct>     ; true   — use the direct (ANF) pipeline
   <c_args>     ; 5      — number of C arguments (for CertiRocq)
   <o_level>    ; 0      — optimisation level
   <anf_conf>   ; 0      — ANF pipeline configuration
@@ -350,8 +350,3 @@ LambdaBoxTyped                               ; typed lambda box (PAst)
 (LambdaANF      <certirocq_config>)          ; LambdaANF after the standard pipeline
 (LambdaANFC     <certirocq_config>)          ; LambdaANF without the final cleanup pass
 ```
-The CLI alias is `peregrine ast {box,typed,mut,local,anf,anfc} FILE`.
-
-## Programmatic construction
-
-When peregrine is driven from OCaml (i.e. by the CLI, not from a config file), the configuration is built directly as a `config'` value in [`bin/compile.ml`](/bin/compile.ml). The CLI exposes one flag per `certirocq_config'` field, one flag per toggleable phase in `erasure_phases'`, and the `--attributes FILES` flag to inject additional `attributes_config` files. Anything that cannot be set from the command line stays at its default.
