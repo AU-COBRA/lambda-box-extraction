@@ -75,7 +75,7 @@ Separate Extraction Pipeline.peregrine_pipeline Pipeline.peregrine_validate
                     ConfigUtils.empty_ocaml_config' ConfigUtils.empty_cakeml_config' ConfigUtils.empty_config'
                     RustGMPRemaps.gmp_const_remaps RustGMPRemaps.gmp_ind_remaps RustGMPRemaps.gmp_rust_config'
                     RustNativeRemaps.native_const_remaps RustNativeRemaps.native_ind_remaps RustNativeRemaps.native_rust_config'
-                    RustMixedRemaps.mixed_const_remaps RustMixedRemaps.mixed_ind_remaps RustMixedRemaps.mixed_rust_config'
+                    RustMixedRemaps.mixed_const_remaps RustMixedRemaps.mixed_const_remaps2 RustMixedRemaps.mixed_ind_remaps RustMixedRemaps.mixed_rust_config'
                     Floats.Float32.to_bits Floats.Float.to_bits
                     Floats.Float32.of_bits Floats.Float.of_bits
                     Csyntax

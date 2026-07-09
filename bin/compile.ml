@@ -215,10 +215,22 @@ let compile_rust_native opts eopts f_prog =
 let compile_rust_mixed opts eopts f_prog =
   (* Path C: mixed representation.  Default path A (rug::Integer), with a
      directive-selected partition of ops compiled in path B (native i64) behind
-     A<->B coercions. *)
+     A<->B coercions.  Partition 1 ([b_partition]): all nine core nat ops. *)
   let b_opts = ConfigUtils.Rust' RustMixedRemaps.mixed_rust_config' in
   compile_backend
     ~const_remaps:RustMixedRemaps.mixed_const_remaps
+    ~ind_remaps:RustMixedRemaps.mixed_ind_remaps
+    b_opts opts eopts f_prog
+
+let compile_rust_mixed2 opts eopts f_prog =
+  (* Path C, alternative partition ([narrow_b_partition]): only div/mod/pow
+     run natively; add/mul/sub/eqb/leb/ltb stay arbitrary-precision.  Same
+     mixed backend machinery (coercions, preamble, ind_remaps) as [rustm] --
+     only WHICH ops are in the B partition differs, demonstrating that
+     correctness does not depend on the partition chosen. *)
+  let b_opts = ConfigUtils.Rust' RustMixedRemaps.mixed_rust_config' in
+  compile_backend
+    ~const_remaps:RustMixedRemaps.mixed_const_remaps2
     ~ind_remaps:RustMixedRemaps.mixed_ind_remaps
     b_opts opts eopts f_prog
 
