@@ -30,6 +30,7 @@ Definition cakeml_phases := {|
   unboxing_c       := Compatible true;
   dearg_ctors_c    := Compatible true;
   dearg_consts_c   := Compatible true;
+  specialize_instances_c := Compatible false;
 |}.
 
 

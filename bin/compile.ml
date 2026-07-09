@@ -4,6 +4,9 @@ open Peregrine.Caml_bytestring
 module Datatypes = Peregrine.Datatypes
 module Config = Peregrine.Config1
 module ConfigUtils = Peregrine.ConfigUtils
+module RustGMPRemaps = Peregrine.RustGMPRemaps
+module RustNativeRemaps = Peregrine.RustNativeRemaps
+module RustMixedRemaps = Peregrine.RustMixedRemaps
 module Pipeline = Peregrine.Pipeline2
 module ResultMonad = Peregrine.ResultMonad
 module Cps = Peregrine.Cps
@@ -121,14 +124,15 @@ let mk_erasure_config eopts = {
   ConfigUtils.unboxing'       = eopts.unboxing;
   ConfigUtils.dearg_ctors'    = eopts.dearg_ctors;
   ConfigUtils.dearg_consts'   = eopts.dearg_consts;
+  ConfigUtils.specialize_instances' = eopts.specialize_instances;
 }
 
-let mk_config b eopts = {
+let mk_config ?(const_remaps=[]) ?(ind_remaps=[]) b eopts = {
   ConfigUtils.backend_opts' = b;
   ConfigUtils.erasure_opts' = Some (mk_erasure_config eopts);
   ConfigUtils.inlinings_opts' = [];
-  ConfigUtils.const_remappings_opts' = [];
-  ConfigUtils.ind_remappings_opts' = [];
+  ConfigUtils.const_remappings_opts' = const_remaps;
+  ConfigUtils.ind_remappings_opts' = ind_remaps;
   ConfigUtils.cstr_reorders_opts' = [];
   ConfigUtils.custom_attributes_opts' = []
 }
@@ -182,14 +186,41 @@ let compile opts f_prog f_config =
   let config = f_config |> read_file |> bytestring_of_caml_string in
   compile_aux opts f_prog prog (Datatypes.Coq_inl config)
 
-let compile_backend backend_opts opts eopts f_prog =
+let compile_backend ?(const_remaps=[]) ?(ind_remaps=[]) backend_opts opts eopts f_prog =
   let prog = f_prog |> read_file |> bytestring_of_caml_string in
-  let config = mk_config backend_opts eopts in
+  let config = mk_config ~const_remaps ~ind_remaps backend_opts eopts in
   compile_aux opts f_prog prog (Datatypes.Coq_inr config)
 
 let compile_rust opts eopts f_prog =
-  let b_opts = ConfigUtils.Rust' ConfigUtils.empty_rust_config' in
-  compile_backend b_opts opts eopts f_prog
+  (* Wire in the GMP numeric backend: the [rug::Integer] preamble plus the
+     nat/positive/N/Z arithmetic remaps (config-path analogue of the plugin's
+     ExtrRustGMP.v).  Without these the Rust backend lowers nat/N/Z to unary
+     Peano / binary-inductive towers, giving catastrophic arithmetic. *)
+  let b_opts = ConfigUtils.Rust' RustGMPRemaps.gmp_rust_config' in
+  compile_backend
+    ~const_remaps:RustGMPRemaps.gmp_const_remaps
+    ~ind_remaps:RustGMPRemaps.gmp_ind_remaps
+    b_opts opts eopts f_prog
+
+let compile_rust_native opts eopts f_prog =
+  (* Path B: the native-i64 numeric representation (no arena, no Box::leak).
+     Fast for values within i64 range; the mixed backend combines it with the
+     arbitrary-precision path A via coercions. *)
+  let b_opts = ConfigUtils.Rust' RustNativeRemaps.native_rust_config' in
+  compile_backend
+    ~const_remaps:RustNativeRemaps.native_const_remaps
+    ~ind_remaps:RustNativeRemaps.native_ind_remaps
+    b_opts opts eopts f_prog
+
+let compile_rust_mixed opts eopts f_prog =
+  (* Path C: mixed representation.  Default path A (rug::Integer), with a
+     directive-selected partition of ops compiled in path B (native i64) behind
+     A<->B coercions. *)
+  let b_opts = ConfigUtils.Rust' RustMixedRemaps.mixed_rust_config' in
+  compile_backend
+    ~const_remaps:RustMixedRemaps.mixed_const_remaps
+    ~ind_remaps:RustMixedRemaps.mixed_ind_remaps
+    b_opts opts eopts f_prog
 
 let compile_elm opts eopts f_prog =
   let b_opts = ConfigUtils.Elm' ConfigUtils.empty_elm_config' in
