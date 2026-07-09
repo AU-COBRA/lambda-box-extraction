@@ -197,6 +197,17 @@ let compile_backend ?(const_remaps=[]) ?(ind_remaps=[]) backend_opts opts eopts 
   let config = mk_config ~const_remaps ~ind_remaps backend_opts eopts in
   compile_aux opts f_prog prog (Datatypes.Coq_inr config)
 
+let compile_rust_unremapped opts eopts f_prog =
+  (* No numeric remapping at all: nat/positive/N/Z are extracted as the
+     inductives they are, so [nat] becomes an arena-allocated successor chain.
+     Arithmetic is asymptotically the same as what the C, OCaml, Wasm, CakeML
+     and Lean backends run, which is precisely what makes this the column that
+     may be compared with them.  [rust] (GMP) and [rustb] (native i64) both
+     replace the *program*, not just its codegen, so their times answer a
+     different question. *)
+  let b_opts = ConfigUtils.Rust' ConfigUtils.empty_rust_config' in
+  compile_backend b_opts opts eopts f_prog
+
 let compile_rust opts eopts f_prog =
   (* Wire in the GMP numeric backend: the [rug::Integer] preamble plus the
      nat/positive/N/Z arithmetic remaps (config-path analogue of the plugin's
