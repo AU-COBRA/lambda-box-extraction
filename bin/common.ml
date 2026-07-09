@@ -14,17 +14,19 @@ let mk_copts verbose debug output_file attrs = {
 }
 
 type erasure_opts = {
-  betared        : bool option;
-  unboxing       : bool option;
-  dearg_ctors    : bool option;
-  dearg_consts   : bool option;
+  betared             : bool option;
+  unboxing            : bool option;
+  dearg_ctors         : bool option;
+  dearg_consts        : bool option;
+  specialize_instances : bool option;
 }
 
-let mk_erasure_opts betared unboxing dearg_ctors dearg_consts = {
+let mk_erasure_opts betared unboxing dearg_ctors dearg_consts specialize_instances = {
   betared;
   unboxing;
   dearg_ctors;
   dearg_consts;
+  specialize_instances;
 }
 
 type certirocq_opts = {
