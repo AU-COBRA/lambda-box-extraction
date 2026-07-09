@@ -68,7 +68,7 @@ library
                       String0
                       Uint63Axioms
                       Universes0
-    build-depends:    base       ^>=4.20.0.0,
+    build-depends:    base       >=4.20.0.0,
                       ghc-internal,
                       deepseq    >= 1.4.4 && < 1.6,
                       bytestring,

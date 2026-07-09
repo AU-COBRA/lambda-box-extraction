@@ -54,6 +54,13 @@ ocamlConfigConv :: OCamlConfig -> ConfigUtils.Coq_ocaml_config'
 ocamlConfigConv OCamlConfig {..} =
   fmap programTypeConv programType
 
+-- Lean backend configuration
+leanConfigConv :: LeanConfig -> ConfigUtils.Coq_lean_config'
+leanConfigConv LeanConfig {..} =
+  ConfigUtils.Build_lean_config'
+    (fmap stringConv leanNamespace)
+    leanPrintFullNames
+
 -- CakeML backend configuration
 cakemlConfigConv :: CakeMLConfig -> ConfigUtils.Coq_cakeml_config'
 cakemlConfigConv t = t
@@ -87,6 +94,7 @@ backendConfigConv (C c) = ConfigUtils.C' $ certirocqConfigConv c
 backendConfigConv (Wasm c) = ConfigUtils.Wasm' $ certirocqConfigConv c
 backendConfigConv (OCaml c) = ConfigUtils.OCaml' $ ocamlConfigConv c
 backendConfigConv (CakeML c) = ConfigUtils.CakeML' $ cakemlConfigConv c
+backendConfigConv (Lean c) = ConfigUtils.Lean' $ leanConfigConv c
 backendConfigConv (Eval c) = ConfigUtils.Eval' $ evalConfigConv c
 backendConfigConv (AST c) = ConfigUtils.AST' $ astConfigConv c
 

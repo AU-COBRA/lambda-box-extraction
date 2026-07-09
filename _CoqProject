@@ -20,6 +20,10 @@ theories/erasure/EInstanceSpecialize.v
 theories/erasure/EHindleyMilner.v
 theories/erasure/EHMNumericSigs.v
 
+theories/lean/LeanIR.v
+theories/lean/LeanCompile.v
+theories/lean/PrintLean.v
+
 theories/backends/RustBackend.v
 theories/backends/RustGMPRemaps.v
 theories/backends/RustNativeRemaps.v
@@ -31,6 +35,7 @@ theories/backends/CakeMLBackend.v
 theories/backends/CBackend.v
 theories/backends/WasmBackend.v
 theories/backends/CertiRocqBackend.v
+theories/backends/LeanBackend.v
 theories/backends/EvalBackend.v
 theories/backends/ASTBackend.v
 

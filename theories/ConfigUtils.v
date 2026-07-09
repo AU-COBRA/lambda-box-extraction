@@ -11,6 +11,7 @@ From Peregrine Require Import RustBackend.
 From Peregrine Require Import ElmBackend.
 From Peregrine Require Import OCamlBackend.
 From Peregrine Require Import CakeMLBackend.
+From Peregrine Require Import LeanBackend.
 From Peregrine Require Import CBackend.
 From Peregrine Require Import WasmBackend.
 From Peregrine Require Import EvalBackend.
@@ -169,6 +170,21 @@ Section BackendConfigOptional.
     program_type := get_optional o default_ocaml_config program_type' program_type;
   |}.
 
+  (* Lean *)
+  Record lean_config' := {
+    lean_namespace'        : option string;
+    lean_print_full_names' : option bool;
+  }.
+  Definition empty_lean_config' : lean_config' := {|
+    lean_namespace'        := None;
+    lean_print_full_names' := None;
+  |}.
+
+  Definition mk_lean_config (o : lean_config') : lean_config := {|
+    lean_namespace        := get_optional o default_lean_config lean_namespace' lean_namespace;
+    lean_print_full_names := get_optional o default_lean_config lean_print_full_names' lean_print_full_names;
+  |}.
+
   Definition cakeml_config' : Type := unit.
   Definition empty_cakeml_config' : cakeml_config' := tt.
 
@@ -227,6 +243,7 @@ Section BackendConfigOptional.
   | Wasm'   : wasm_config' -> backend_config'
   | OCaml'  : ocaml_config' -> backend_config'
   | CakeML' : cakeml_config' -> backend_config'
+  | Lean'   : lean_config' -> backend_config'
   | Eval'   : eval_config' -> backend_config'
   | AST'    : ast_config' -> backend_config'.
   Definition mk_backend_config (o : backend_config') : backend_config :=
@@ -237,6 +254,7 @@ Section BackendConfigOptional.
     | Wasm' o   => Wasm (mk_certirocq_config default_wasm_config o)
     | OCaml' o  => OCaml (mk_ocaml_config o)
     | CakeML' o => CakeML (mk_cakeml_config o)
+    | Lean' o   => Lean (mk_lean_config o)
     | Eval' o   => Eval (mk_eval_config o)
     | AST' o    => AST (mk_ast_config o)
     end.
@@ -317,6 +335,7 @@ Section GeneralConfigOptional.
       | Wasm' _   => get_default_phases_opt wasm_phases
       | OCaml' _  => get_default_phases_opt ocaml_phases
       | CakeML' _ => get_default_phases_opt cakeml_phases
+      | Lean' _   => get_default_phases_opt lean_phases
       | Eval' _   => get_default_phases_opt eval_phases
       | AST' _   => get_default_phases_opt ast_phases
       end in
@@ -329,6 +348,7 @@ Section GeneralConfigOptional.
       | Wasm' _   => enforce_phases o def_opt wasm_phases
       | OCaml' _  => enforce_phases o def_opt ocaml_phases
       | CakeML' _ => enforce_phases o def_opt cakeml_phases
+      | Lean' _   => enforce_phases o def_opt lean_phases
       | Eval' _   => enforce_phases o def_opt eval_phases
       | AST' _   => enforce_phases o def_opt ast_phases
       end
@@ -411,6 +431,12 @@ Section GeneralConfigOptional.
   Definition is_cakeml_config (o : config) : bool :=
     match o.(backend_opts) with
     | CakeML _ => true
+    | _ => false
+    end.
+
+  Definition is_lean_config (o : config) : bool :=
+    match o.(backend_opts) with
+    | Lean _ => true
     | _ => false
     end.
 

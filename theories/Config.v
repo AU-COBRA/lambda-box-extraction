@@ -48,6 +48,11 @@ Section BackendConfig.
     program_type : Malfunction.Serialize.program_type;
   }.
 
+  Record lean_config := {
+    lean_namespace        : string;
+    lean_print_full_names : bool;
+  }.
+
   Definition cakeml_config : Type := unit.
 
   Record eval_config := {
@@ -75,6 +80,7 @@ Section BackendConfig.
   | Wasm   : wasm_config -> backend_config
   | OCaml  : ocaml_config -> backend_config
   | CakeML : cakeml_config -> backend_config
+  | Lean   : lean_config -> backend_config
   | Eval   : eval_config -> backend_config
   | AST    : ast_config -> backend_config.
 

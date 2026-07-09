@@ -1,0 +1,8 @@
+name = "peregrine"
+version = "0.1.0"
+defaultTargets = ["Peregrine"]
+
+[[lean_lib]]
+name = "Peregrine"
+srcDir = "lean"
+roots = ["Main", "Peregrine.Basic", "Peregrine.Runtime"]

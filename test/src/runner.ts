@@ -10,6 +10,7 @@ import { compile_ocaml, compile_types } from "./ocaml";
 import { compile_cakeml, get_cake } from "./cakeml";
 import { compile_rust, prepare_cargo, run_rust } from "./rust";
 import { prepare_elm_project, run_elm } from "./elm";
+import { prepare_lean_project, run_lean } from "./lean";
 import { test_configurations, tests } from "./tests";
 
 
@@ -275,6 +276,28 @@ async function run_tests(lang: Lang, n: string, opts: string, tests: TestCase[])
 
         // Report result
         print_result(res, test.tsrc);
+      }
+      break;
+
+    case Lang.Lean:
+      var leandir = prepare_lean_project(tmpdir, compile_timeout);
+
+      for (var test of tests) {
+        if (test.src === undefined) continue;
+        process.stdout.write(`  ${test.src}: `);
+
+        // Compile peregrine
+        const f_lean = compile_box(test.src, leandir, Lang.Lean, opts);
+        if (typeof f_lean !== "string") {
+          print_result(f_lean, test.src);
+          continue;
+        }
+
+        // Run Lean (compiles + runs in one shot)
+        const res = run_lean(f_lean, leandir, test, exec_timeout);
+
+        // Report result
+        print_result(res, test.src);
       }
       break;
 
