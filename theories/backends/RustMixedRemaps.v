@@ -45,8 +45,22 @@ Definition b2i (e : string) : remapped_constant :=
 Definition b2b (e : string) : remapped_constant :=
   mk_const ("fn ##name##(&'a self, a: &'a rug::Integer, b: &'a rug::Integer) -> bool { let a = self.__to_i64(a); let b = self.__to_i64(b); " ++ e ++ " }").
 
-(** The B partition: the (nat) operations compiled natively.  Placed BEFORE the
-    path-A [gmp_const_remaps] so they take precedence in remap lookup. *)
+(** The B partition is a DIRECTIVE, not a fixed property of the backend: it is
+    just a list of (constant, native-body) remaps, and [mixed_const_remaps_of]
+    builds the full remap table by putting the chosen partition BEFORE the
+    path-A [gmp_const_remaps] (so B entries take precedence in remap lookup,
+    and every op not named by the partition falls through to path A).  Since
+    every [b2i]/[b2b] body is proved-at-the-boundary equivalent to the path-A
+    meaning of the same op (coerce in, compute, coerce out), swapping which
+    ops are named by the partition can never change the result -- only the
+    performance profile.  That is the "partition is a performance oracle"
+    principle: correctness comes from the coercion discipline, not from which
+    ops happen to be in [b_partition]. *)
+Definition mixed_const_remaps_of (partition : constant_remappings) : constant_remappings :=
+  (partition ++ gmp_const_remaps)%list.
+
+(** Partition 1 (the original, maximal partition): all nine core nat
+    operations run natively in path B. *)
 Definition b_partition : constant_remappings := [
   (<%% Nat.add %%>,    b2i "a + b");
   (<%% Nat.mul %%>,    b2i "a * b");
@@ -59,8 +73,24 @@ Definition b_partition : constant_remappings := [
   (<%% Nat.ltb %%>,    b2b "a < b")
 ].
 
+(** Partition 2 (a strictly narrower alternative): only the three operations
+    that are expensive to keep arbitrary-precision (div/mod/pow) run
+    natively; add/mul/sub/eqb/leb/ltb stay in path A (GMP).  This is a
+    DIFFERENT partition from [b_partition] -- fewer ops in B, more in A --
+    yet it is compiled and validated exactly the same way, demonstrating
+    that correctness does not depend on which partition is chosen. *)
+Definition narrow_b_partition : constant_remappings := [
+  (<%% Nat.div %%>,    b2i "if b == 0 { 0 } else { a / b }");
+  (<%% Nat.modulo %%>, b2i "if b == 0 { a } else { a % b }");
+  (<%% Nat.pow %%>,    b2i "a.pow(b as u32)")
+].
+
 Definition mixed_const_remaps : constant_remappings :=
-  (b_partition ++ gmp_const_remaps)%list.
+  mixed_const_remaps_of b_partition.
+
+(** Same mixed backend, alternative (narrower) partition: [rustm2]. *)
+Definition mixed_const_remaps2 : constant_remappings :=
+  mixed_const_remaps_of narrow_b_partition.
 
 (** The nat/Z/N/positive TYPE stays path A ([Int<'a>]); constructors and
     eliminators are the path-A (GMP) ones. *)

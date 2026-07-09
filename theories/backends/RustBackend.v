@@ -84,13 +84,36 @@ Definition gmp_rust_config := {|
   rust_default_attributes := "#[derive(Debug, Clone)]";
 |}.
 
+(* [dearg_ctors_c]: whether to *trim* trailing dead bits off inductive
+   constructor dearging masks (an eta-expansion-avoidance micro-opt in
+   MetaRocq's typed dearging pass), as opposed to whether dearging runs at
+   all -- dead-argument analysis always runs regardless of this flag.
+   Left [Compatible true] (the trim), a fully-live (all-"keep") constructor
+   mask gets trimmed all the way down to the empty mask ([trim_end false]
+   strips *all* trailing [false] bits, and an all-live mask is all [false]).
+   [Optimize.check_oib_masks] then rejects that empty mask because its
+   length no longer equals the constructor's recorded arity (a strict `==`,
+   unlike the prefix-tolerant checks used elsewhere for constant masks and
+   for applying case-branch masks). That single rejection fails
+   [valid_masks_env] for the *whole program* (dearging is an all-or-nothing,
+   whole-environment check -- see [Transforms.dearg_diagnose]), which is why
+   completely ordinary types like [nat]/[list]/[prod] (whose "S"/"cons"/
+   "pair" constructors have no dead non-parameter fields to trim) silently
+   disabled dearging outright: every erased type-argument value-param
+   (Peregrine phase P4's "A: ()") stayed in the generated Rust for every
+   benchmark. Turning trimming off avoids ever producing such an
+   empty-but-should-be-full-length mask; per-argument/per-field dead-code
+   removal (both constant args, via [dearg_consts_c], and constructor
+   fields) is unaffected -- only the harmless trailing-bits compaction is
+   skipped. Confirmed empirically with the `deargdiag` diagnostic and a
+   5/5 rustb correctness re-run (see phase P4 report). *)
 Definition rust_phases := {|
   implement_box_c  := Compatible false;
   implement_lazy_c := Compatible false;
   cofix_to_laxy_c  := Compatible false;
   betared_c        := Compatible false;
   unboxing_c       := Compatible true;
-  dearg_ctors_c    := Compatible true;
+  dearg_ctors_c    := Compatible false;
   dearg_consts_c   := Compatible true;
   specialize_instances_c := Compatible false;
 |}.
