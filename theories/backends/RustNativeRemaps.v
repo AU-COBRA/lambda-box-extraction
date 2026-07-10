@@ -85,8 +85,12 @@ Definition native_const_remaps : constant_remappings := [
   (<%% Z.min %%>, mk_const "fn ##name##(&'a self, a: i64, b: i64) -> i64 { if a <= b { a } else { b } }");
   (<%% Z.max %%>, mk_const "fn ##name##(&'a self, a: i64, b: i64) -> i64 { if a >= b { a } else { b } }");
   (<%% Z.eqb %%>, mk_const "fn ##name##(&'a self, a: i64, b: i64) -> bool { a == b }");
-  (<%% Z.div %%>, mk_const "fn ##name##(&'a self, a: i64, b: i64) -> i64 { if b == 0 { 0 } else { a.div_euclid(b) } }");
-  (<%% Z.modulo %%>, mk_const "fn ##name##(&'a self, a: i64, b: i64) -> i64 { if b == 0 { a } else { a.rem_euclid(b) } }");
+  (* Coq [Z.div]/[Z.modulo] are floor division (remainder takes the divisor's
+     sign). Rust's [/]/[%] truncate toward zero and [div_euclid] is Euclidean,
+     so both disagree with Coq on negative divisors; the floor result is
+     recovered explicitly. Matches the GMP path's [div_floor]/[rem_floor]. *)
+  (<%% Z.div %%>, mk_const "fn ##name##(&'a self, a: i64, b: i64) -> i64 { if b == 0 { 0 } else { let q = a / b; let r = a % b; if r != 0 && (r < 0) != (b < 0) { q - 1 } else { q } } }");
+  (<%% Z.modulo %%>, mk_const "fn ##name##(&'a self, a: i64, b: i64) -> i64 { if b == 0 { a } else { let r = a % b; if r != 0 && (r < 0) != (b < 0) { r + b } else { r } } }");
   (<%% Z.compare %%>, mk_const "fn ##name##(&'a self, a: i64, b: i64) -> std::cmp::Ordering { a.cmp(&b) }");
   (<%% Z.of_N %%>, mk_const "fn ##name##(&'a self, a: i64) -> i64 { a }");
   (<%% Z.abs_N %%>, mk_const "fn ##name##(&'a self, a: i64) -> i64 { a.abs() }");
