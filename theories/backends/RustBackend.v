@@ -92,21 +92,20 @@ Definition gmp_rust_config := {|
    mask gets trimmed all the way down to the empty mask ([trim_end false]
    strips *all* trailing [false] bits, and an all-live mask is all [false]).
    [Optimize.check_oib_masks] then rejects that empty mask because its
-   length no longer equals the constructor's recorded arity (a strict `==`,
+   length differs from the constructor's recorded arity (a strict `==`,
    unlike the prefix-tolerant checks used elsewhere for constant masks and
    for applying case-branch masks). That single rejection fails
    [valid_masks_env] for the *whole program* (dearging is an all-or-nothing,
    whole-environment check -- see [Transforms.dearg_diagnose]), which is why
    completely ordinary types like [nat]/[list]/[prod] (whose "S"/"cons"/
    "pair" constructors have no dead non-parameter fields to trim) silently
-   disabled dearging outright: every erased type-argument value-param
-   (Peregrine phase P4's "A: ()") stayed in the generated Rust for every
-   benchmark. Turning trimming off avoids ever producing such an
+   disable dearging outright: every erased type-argument value-param
+   (an erased [()] slot) stays in the generated Rust.
+   Turning trimming off avoids ever producing such an
    empty-but-should-be-full-length mask; per-argument/per-field dead-code
    removal (both constant args, via [dearg_consts_c], and constructor
    fields) is unaffected -- only the harmless trailing-bits compaction is
-   skipped. Confirmed empirically with the `deargdiag` diagnostic and a
-   5/5 rustb correctness re-run (see phase P4 report). *)
+   skipped. *)
 Definition rust_phases := {|
   implement_box_c  := Compatible false;
   implement_lazy_c := Compatible false;

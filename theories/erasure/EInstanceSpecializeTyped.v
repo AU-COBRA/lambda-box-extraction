@@ -1,33 +1,31 @@
 (** * Instance / dictionary specialization on TYPED lambda-box (λ□ᵀ / ExAst)
 
-    STANDALONE, verified-as-far-as-tractable first cut.  This module is a
-    self-contained sibling of the (wired, unverified) untyped
-    [EInstanceSpecialize.v]; it does NOT import that module and does NOT touch
-    the build wiring.  It operates on MetaRocq's *typed* erased syntax
+    This module is the typed variant of the instance-specialization pass, a
+    self-contained sibling of the untyped [EInstanceSpecialize.v] that does not
+    import it.  It operates on MetaRocq's *typed* erased syntax
     ([MetaRocq.Erasure.Typed.ExAst]) — the layer that still carries [box_type]
-    information ([cst_type]) — and it is the "right place" for the pass in the
-    Peregrine pipeline: it runs before the Rust / Elm backends, where the
-    dictionary plumbing it removes is NOT re-optimized away by a downstream
-    native compiler (unlike the OCaml / C paths).
+    information ([cst_type]) — which is where the pass belongs in the Peregrine
+    pipeline: it runs before the Rust / Elm backends, where the dictionary
+    plumbing it removes is not re-optimized away by a downstream native
+    compiler (unlike the OCaml / C paths).
 
     ------------------------------------------------------------------------
     WHAT THE PASS DOES (identical algorithm to the untyped module, lifted to
     ExAst so [box_type]s are tracked).
 
     At a call [f D x1 .. xn] where the head [f] is a [tConst] (its body may be
-    a [tFix], which we unfold once) and [D] is a *statically-known dictionary*
-    — a closed [tConstruct] whose inductive is a single-constructor record, or
-    a [tConst] delta-unfolding to one — we:
+    a [tFix], unfolded once) and [D] is a *statically-known dictionary* — a
+    closed [tConstruct] whose inductive is a single-constructor record, or a
+    [tConst] delta-unfolding to one — the pass:
 
       1. emit a fresh specialized constant [f$specN] whose body is [f]'s body
          with [D] substituted in ([spec_beta]) and the exposed method
          projections collapsed by the local beta/iota reducer
          ([specialize_instances]);
-      2. give [f$specN] a [cst_type]: an instantiation of [f]'s type scheme
-         (FIRST CUT: we reuse [f]'s scheme verbatim; the now-dead dictionary
-         parameter is left in place and is dropped by the downstream [dearg]
-         pass, which is precisely why the recommended phase order is
-         specialize -> dearg -> betared);
+      2. give [f$specN] a [cst_type]: the callee's type scheme is reused
+         unchanged, so the dictionary parameter that becomes dead is left in
+         place and is dropped by the downstream [dearg] pass — which is why the
+         phase order is specialize -> dearg -> betared;
       3. redirect the call site to [f$specN x1 .. xn].
 
     The reductions that expose then discard the plumbing:
@@ -47,49 +45,42 @@
     emitted body so chained dictionary plumbing is specialized too.
 
     ------------------------------------------------------------------------
-    VERIFICATION STRATEGY (what is Qed here vs. the single residual).
+    VERIFICATION STRUCTURE.
 
-    [eval] is defined on *untyped* [EAst] via [trans_env].  So the cleanest
-    route — and the one taken here — is:
+    [eval] is defined on *untyped* [EAst] via [trans_env].  The typed transform
+    [specialize_program_typed] therefore does all of its analysis on the
+    translated environment [trans_env Σ] and differs from the purely-untyped
+    driver [drive_untyped] only in the [box_type] data that [trans_env] erases:
 
-      * define the typed transform [specialize_program_typed] so that it does
-        ALL of its analysis on the translated environment [trans_env Σ] and
-        differs from a purely-untyped driver [drive_untyped] ONLY in the
-        [box_type] data that [trans_env] erases anyway;
-      * prove [specialize_commutes] : erasing the typed result equals running
-        [drive_untyped] on the erased input, i.e.
+      * [specialize_commutes] proves that erasing the typed result equals
+        running [drive_untyped] on the erased input, i.e.
 
             trans_env (specialize_program_typed Σ t)  =  drive_untyped (trans_env Σ) t.
 
-        This is fully **Qed** and is the genuinely new verified content: it
-        reduces every semantic/wellformedness question about the *typed* pass
-        to the corresponding question about the untyped core, with NO blanket
-        trust over the typed layer.
-      * From it, [typed_specialize_wf] (wellformedness preservation) and
-        [typed_specialize_pres] (semantics preservation) are each **Qed**,
-        modulo ONE precisely-stated residual about the untyped core,
-        [untyped_drive_correct], which packages exactly the δ/β/ι simulation.
-        This residual is the SAME obligation MetaRocq itself leaves for the
-        analogous optional passes ([EBeta.trust_betared_pres] /
-        [EBeta.trust_betared_wf], [EInlining]); its honest discharge is the
-        eval-simulation modelled on [EInlining]/[EBeta] correctness and is
-        future work.  We isolate it to the untyped reducer rather than
-        trusting the typed transform wholesale.
+        It is proved by [Qed] and reduces every semantic/wellformedness
+        question about the *typed* pass to the corresponding question about the
+        untyped core, with no blanket trust over the typed layer.
+      * [typed_specialize_wf] (wellformedness preservation) and
+        [typed_specialize_pres] (semantics preservation) are each proved by
+        [Qed], modulo one residual about the untyped core,
+        [untyped_drive_correct], which packages the δ/β/ι eval-simulation.
+        This residual is the same obligation MetaRocq leaves axiomatized for
+        the analogous optional passes ([EBeta.trust_betared_pres] /
+        [EBeta.trust_betared_wf], [EInlining]); it is scoped to the untyped
+        reducer rather than trusting the typed transform wholesale.
 
-    HONESTY: the typed-specific reasoning (the [trans_env] commutation and the
-    reduction of both preservation properties to the untyped core) is machine-
-    checked (Qed, see [Print Assumptions typed_specialize_pres] at the bottom,
-    which lists exactly [untyped_drive_correct]).  The untyped δ/β/ι
-    simulation itself is the stated residual, not proved here.
+    The typed-specific reasoning (the [trans_env] commutation and the reduction
+    of both preservation properties to the untyped core) is machine-checked;
+    [Print Assumptions typed_specialize_pres] at the bottom lists exactly
+    [untyped_drive_correct].  The untyped δ/β/ι simulation itself is the stated
+    residual axiom.
 
     ------------------------------------------------------------------------
-    INTEGRATION NEXT-STEPS (typed pipeline, before Rust/Elm):
-      - wire [specialize_program_typed] into the typed extraction pipeline
-        (Typed/Optimize.v / Typed/Extraction.v) as an optional phase;
-      - phase order: specialize -> dearg -> betared (dearg removes the dead
-        dictionary parameter this pass leaves; betared mops up cascaded redexes);
-      - discharge [untyped_drive_correct] by the eval simulation modelled on
-        [EInlining.optimize]/[EBeta] correctness, then this module is axiom-free.
+    PIPELINE PLACEMENT (typed pipeline, before Rust/Elm).
+    [specialize_program_typed] is an optional phase for the typed extraction
+    pipeline (Typed/Optimize.v / Typed/Extraction.v).  The phase order is
+    specialize -> dearg -> betared: [dearg] removes the dead dictionary
+    parameter this pass leaves, and [betared] mops up cascaded redexes.
 *)
 
 From Stdlib Require Import List.
@@ -103,7 +94,8 @@ Import ListNotations.
 
 (** Throughout: [EAst.*] / [EGlobalEnv.*] are the *untyped* names, [ExAst.*]
     the *typed* ones (ExAst re-exports [EAst], so both [ConstantDecl],
-    [cst_body], [lookup_constant] etc. exist; we qualify to disambiguate). *)
+    [cst_body], [lookup_constant] etc. exist; both are qualified to
+    disambiguate). *)
 
 (* ------------------------------------------------------------------------ *)
 (** ** Body-level machinery (on the shared [term] type). *)
@@ -401,9 +393,9 @@ Definition redirect_decl_typed (Σu : EAst.global_context)
   | _ => d
   end.
 
-(** Typed declaration for a generated specialization.  [box_type]: an
-    instantiation of the callee's scheme — FIRST CUT reuses it verbatim (the
-    dead dictionary parameter is dropped later by dearg). *)
+(** Typed declaration for a generated specialization.  The [cst_type] reuses
+    the callee's type scheme unchanged; the dictionary parameter that becomes
+    dead is dropped later by [dearg]. *)
 Definition spec_typed_decl (Σ : ExAst.global_env) (callee : kername) (body : term)
   : ExAst.global_decl :=
   ExAst.ConstantDecl
@@ -488,13 +480,11 @@ Proof.
 Qed.
 
 (* ------------------------------------------------------------------------ *)
-(** ** The single residual: correctness of the untyped core.
+(** ** The single residual axiom: correctness of the untyped core.
 
-    This packages exactly the δ/β/ι eval-simulation for [drive_untyped],
-    mirroring [EBeta.trust_betared_pres] / [trust_betared_wf] and the
-    [EInlining] correctness argument.  Discharging it (by simulation on
-    [EWcbvEval.eval], case [eval_delta] for δ then β/ι, modelled on
-    [EInlining.optimize] correctness) makes this module axiom-free. *)
+    This packages the δ/β/ι eval-simulation for [drive_untyped], mirroring
+    [EBeta.trust_betared_pres] / [trust_betared_wf] and the [EInlining]
+    correctness argument. *)
 Axiom untyped_drive_correct :
   forall (efl : EEnvFlags) (wfl : WcbvFlags) (Σu : EAst.global_context) (t : term),
     wf_eprogram efl (Σu, t) ->

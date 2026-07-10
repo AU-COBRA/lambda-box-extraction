@@ -1,4 +1,10 @@
-(** * Instance / dictionary specialization for lambda-box (unverified first cut)
+(** * Instance / dictionary specialization for untyped lambda-box
+
+    This module implements the instance-specialization pass on untyped
+    lambda-box terms ([EAst]); its sibling [EInstanceSpecializeTyped] provides
+    the typed ([ExAst]) variant.  Correctness and wellformedness preservation
+    are provided as trust axioms, matching the other [Compatible]-class
+    optional transforms in this toolchain.
 
     Motivation.  Typeclass-heavy frontends (notably Lean) erase to lambda-box
     in which even trivial arithmetic drags in dictionary values: [1 + 1] is
@@ -30,7 +36,7 @@
     the fixpoint is unfolded once first), so the beta/iota reductions above fire
     *inside* [f]'s body across the call boundary; the call site is redirected to
     [f$specN x].  After this, existing dead-argument elimination ([Optimize]/
-    dearg) drops the now-unused [d] parameter.  A dictionary argument is
+    dearg) drops the unused [d] parameter.  A dictionary argument is
     recognised by the heuristic "closed constructor whose inductive is a
     single-constructor record" ([dict_value]/[is_record_ind]), which excludes
     ordinary data (nat, list, bool, ...).  Specializations are memoised in a map
@@ -54,12 +60,11 @@
         iota-on-constructor, and [EInlining] inlines *named constants* uniformly
         rather than specializing a shared function per call site.
 
-    Verification status.  UNVERIFIED.  Following the established pattern for the
-    optional / "Compatible" transforms in this toolchain (cf. [EBeta.betared_
-    transformation], which is justified by the [trust_betared_*] axioms, and the
-    [Admitted] obligations in [Transforms.v]), correctness and wellformedness
-    preservation are stated as trust axioms.  This is acceptable for a
-    [Compatible]-class optional phase; a real proof is future work. *)
+    Verification status.  Correctness and wellformedness preservation are
+    stated as trust axioms, following the pattern of the other optional
+    [Compatible]-class transforms in this toolchain (cf.
+    [EBeta.betared_transformation], justified by the [trust_betared_*]
+    axioms). *)
 
 From Stdlib Require Import List.
 From MetaRocq.Utils Require Import utils ReflectEq.
@@ -187,8 +192,8 @@ Definition dict_value (Σ : global_declarations) (t : term) : option term :=
 (** A spine element that belongs in a specialization prefix: either an erased
     type argument ([tBox], which typically precedes the dictionaries after
     erasure) or a statically-known dictionary value.  The boolean flags whether
-    it is an actual dictionary (so we only specialize prefixes that contain at
-    least one). *)
+    it is an actual dictionary (so only prefixes that contain at least one
+    dictionary are specialized). *)
 Definition prefix_elt (Σ : global_declarations) (t : term) : option (bool * term) :=
   match dict_value Σ t with
   | Some d => Some (true, d)

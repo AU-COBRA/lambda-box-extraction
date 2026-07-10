@@ -59,7 +59,7 @@ Definition b2b (e : string) : remapped_constant :=
 Definition mixed_const_remaps_of (partition : constant_remappings) : constant_remappings :=
   (partition ++ gmp_const_remaps)%list.
 
-(** Partition 1 (the original, maximal partition): all nine core nat
+(** Partition 1 (the maximal partition): all nine core nat
     operations run natively in path B. *)
 Definition b_partition : constant_remappings := [
   (<%% Nat.add %%>,    b2i "a + b");

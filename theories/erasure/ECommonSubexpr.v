@@ -1,122 +1,114 @@
 (** * Common-subexpression elimination / let-introduction for lambda-box
-      (unverified first cut)
+
+    This middle-end pass hoists a repeated closed subterm of a constant body
+    into a single outermost [tLetIn] and replaces its occurrences by a bound
+    variable, so a value that the source shared but erasure duplicated is
+    computed once at run time.  Wellformedness preservation and the algebraic
+    core of the transform are proved; whole-program evaluation preservation
+    rests on one axiom ([cse_pres_eval]).
 
     Motivation.  Several Peregrine frontends do not preserve [let] bindings:
     Agda inlines its internal let-bindings before erasure, and Lean drops them
     entirely.  A subterm that the source shared through a [let] is therefore
-    *duplicated* in the erased lambda-box term and, under the call-by-value
-    semantics of the backends, recomputed once per occurrence at run time.  This
-    is a documented cause of the Lean sieve / Fannkuch slowdowns and of Agda's
-    general inefficiency.  A middle-end CSE pass reverses the damage for every
-    frontend at once: it hoists a repeated subterm into a single [tLetIn] and
-    replaces its occurrences by a bound variable, so the work is performed once.
+    duplicated in the erased lambda-box term and, under the call-by-value
+    semantics of the backends, recomputed once per occurrence at run time.  A
+    middle-end CSE pass reverses this for every frontend at once: it hoists a
+    repeated subterm into a single [tLetIn] and replaces its occurrences by a
+    bound variable, so the work is performed once.
 
-    Why this is a win in lambda-box specifically.  Lambda-box is pure (erasure
-    has already discarded proofs and types; there are no observable effects), so
-    sharing a subterm never changes the *result*.  Under the backends'
-    call-by-value evaluation a [tLetIn] forces its bindee exactly once before the
-    body runs, which is precisely the sharing we want.  CSE cannot change
-    strictness here either: everything the pass hoists is a *manifest subterm*
-    that the original program already evaluates on every occurrence, so pulling
-    it out to a [let] that runs once can only remove work, never add it, and can
-    never move a diverging computation to a point where the program did not
-    already demand it (see the "only hoist subterms that already run on every
-    path" caveat in the risks section of the design notes).
+    Why sharing is sound in lambda-box.  Lambda-box is pure (erasure has
+    discarded proofs and types; there are no observable effects), so sharing a
+    subterm never changes the result.  Under the backends' call-by-value
+    evaluation a [tLetIn] forces its bindee exactly once before the body runs,
+    which is precisely the sharing wanted.  Sharing does not change strictness
+    provided the hoisted subterm already runs on every path: the pass hoists
+    only a manifest subterm that the original program evaluates on every
+    occurrence, so pulling it out to a [let] that runs once can only remove
+    work, never add it, and never moves a diverging computation to a point the
+    program did not already demand.
 
     ---------------------------------------------------------------------------
-    ALGORITHM (this first cut).
+    ALGORITHM.
 
     Scope.  The pass runs per constant body.  Constant bodies in a lambda-box
-    global environment are *closed* (no dangling [tRel]).  We exploit that: we
-    only ever hoist a subterm [s] that is itself **closed** ([closedn 0 s]).  A
+    global environment are closed (no dangling [tRel]).  The pass exploits this:
+    it hoists only a subterm [s] that is itself closed ([closedn 0 s]).  A
     closed subterm is invariant under [lift], is identical wherever it appears
     regardless of the number of enclosing binders, and can be substituted by a
     de-Bruijn index that points at a freshly-introduced outermost [let] binder.
-    This makes the transform correct-by-construction with no index arithmetic
-    beyond "count the binders you have descended under".
+    The transform is therefore correct-by-construction with no index arithmetic
+    beyond counting the binders descended under.
 
     Steps, for a closed constant body [t]:
       1. Collect the multiset of all subterms of [t] (fuel-bounded traversal).
-      2. Keep the candidates: subterms that are [closedn 0] and whose structural
+      2. Keep the candidates: subterms that are [closedn 0], whose structural
          [size] is at least [cse_threshold] (small subterms are not worth a
-         binder; and hoisting a bare [tRel]/[tConst] would be pointless).
+         binder, and hoisting a bare [tRel]/[tConst] would be pointless), and
+         all of whose occurrences are in strict (always-evaluated) positions.
       3. Keep those occurring at least [cse_min_occ] (= 2) times.
       4. Score each surviving candidate by its estimated dynamic saving,
-         [(occurrences - 1) * size], and pick the maximum (the "best" one).
+         [(occurrences - 1) * size], and pick the maximum.
       5. Emit  [tLetIn "cse" best (abstract 0 best t)]  where [abstract k s u]
          replaces every occurrence of [s] in [u] by [tRel k], incrementing [k]
          under each binder so the index always resolves to the outer [let].
 
-    This performs ONE hoist per constant.  Iterating to a fixpoint (hoist,
-    re-scan, hoist the next-best, ...) and hoisting *nested* common subterms is a
-    straightforward extension left as next work (see EXTENSIONS below); the
-    single-hoist core already captures the largest repeated subterm, which is the
-    dominant win on the motivating benchmarks.
-
-    EXTENSIONS (not implemented here, deliberately):
-      - Open subterms.  A subterm with free [tRel]s that are all bound *above*
-        the nearest common ancestor of its occurrences may still be hoisted to
-        that ancestor with a [lift].  This is the "de-Bruijn-consistent" case; it
-        needs nearest-common-binder-scope analysis and is the natural v2.
-      - Iteration to a fixpoint and simultaneous multi-candidate hoisting.
-      - Descending into [tPrim] array payloads (skipped here as a leaf).
+    This performs one hoist per constant, capturing the largest repeated
+    subterm.  Possible extensions, none of which the pass performs:
+      - Hoisting open subterms whose free [tRel]s are all bound above the
+        nearest common ancestor of the occurrences, lifted to that ancestor
+        with a [lift]; this needs nearest-common-binder-scope analysis.
+      - Iterating to a fixpoint and hoisting several candidates simultaneously.
+      - Descending into [tPrim] array payloads (treated as a leaf here).
 
     ---------------------------------------------------------------------------
     PIPELINE PLACEMENT AND VERIFICATION STATUS.
 
-    CSE is the *inverse* of inlining/beta, so ordering matters: it must run
-    AFTER [EInlining]/[EBeta]/dearg, near the very end of the unsafe tail,
-    otherwise a later beta/inline pass would just undo it (or, worse, CSE would
-    fight an inliner that is trying to specialize).  The intended slot is inside
-    [extra_unsafe_transforms] in erasure/Transforms.v, immediately AFTER
-    [specialize_instances]/[betared] and before/after [implement_box]
-    (implement_box does not create sharing opportunities, so either side is
-    fine; placing it last keeps it closest to code generation).
+    CSE is the inverse of inlining/beta, so ordering matters: it must run after
+    [EInlining]/[EBeta]/dearg, near the end of the unsafe tail, otherwise a
+    later beta/inline pass would undo it.  The intended slot is inside
+    [extra_unsafe_transforms] in erasure/Transforms.v, after
+    [specialize_instances]/[betared]; [implement_box] creates no sharing
+    opportunities, so either side of it is fine, and placing CSE last keeps it
+    closest to code generation.  It is a [Compatible]-class, opt-in optional
+    phase, wired like [EInstanceSpecialize]/[EBeta].
 
-    It is a [Compatible]-class, opt-in optional phase, wired exactly like
-    [EInstanceSpecialize]/[EBeta].  Verification status: VERIFIED, modulo one
-    residual evaluation-simulation lemma.  Unlike the [trust_*]-based pattern of
-    [EBeta]/[EInstanceSpecialize], this module actually discharges its trust
-    obligations:
+    Verification status: wellformedness preservation and the algebraic core are
+    proved; whole-program evaluation preservation rests on one axiom.
 
       - The core algebraic fact is proved: [abstract_subst] shows that for a
         closed [s], [subst [s] k (abstract s k t) = t] whenever [closedn k t] --
-        i.e. binding [s] and substituting it back reconstructs [t].
+        binding [s] and substituting it back reconstructs [t].
 
-      - Wellformedness preservation ([cse_wf], discharging what was
-        [trust_cse_wf]) is fully proved: the pass is guarded to fire only when
-        [has_tLetIn] and [has_tRel] hold (otherwise it is the identity), the
-        hoisted [s] is a closed, non-lambda subterm of a wellformed body hence
-        itself wellformed ([collect_wf], [wellformed_closedn_le]), [abstract]
-        preserves wellformedness ([wellformed_abstract]), and [wellformed] is
-        invariant under the constant-body environment rewrite
-        ([wellformed_cse_env]).  [Print Assumptions cse_wf] shows no custom
-        axioms.
+      - Wellformedness preservation ([cse_wf]) is fully proved: the pass is
+        guarded to fire only when [has_tLetIn] and [has_tRel] hold (otherwise it
+        is the identity), the hoisted [s] is a closed, non-lambda subterm of a
+        wellformed body hence itself wellformed ([collect_wf],
+        [wellformed_closedn_le]), [abstract] preserves wellformedness
+        ([wellformed_abstract]), and [wellformed] is invariant under the
+        constant-body environment rewrite ([wellformed_cse_env]).
+        [Print Assumptions cse_wf] reports no custom axioms.
 
       - Both [TransformExt] obligations are proved ([extends_cse]).
 
-      - SOUNDNESS FIX: hoisting is only correct for subterms evaluated on every
-        path.  [candidate_ok] now requires every occurrence of the candidate to
-        be in a strict (always-evaluated) position
-        ([count_term u all_strict = count_term u all_full], via [collect_strict]).
-        The earlier unconditional selection was semantically UNSOUND (it could
-        lift a subterm out of a [tLambda] body / untaken [tCase] branch and force
-        it eagerly, changing termination).
+      - Soundness depends on hoisting only subterms evaluated on every path.
+        [candidate_ok] requires every occurrence of the candidate to be in a
+        strict (always-evaluated) position
+        ([count_term u all_strict = count_term u all_full], via
+        [collect_strict]).  This prevents lifting a subterm out of a [tLambda]
+        body or an untaken [tCase] branch and forcing it eagerly, which would
+        change termination.
 
-      - Evaluation preservation ([cse_pres]) uses the correct observational
-        relation [v' = v] (a sharing pass returns the SAME value; the earlier
-        [v' = cse_term v] obseq was FALSE — see the note at [cse_pres_eval]).
-        It is reduced to ONE clearly-stated residual [cse_pres_eval], the
-        whole-program CBV simulation, which is TRUE for the strict-guarded
-        selection.  Its algebraic backbone [abstract_subst] is proved; the
-        remaining cross-environment induction over the [EWcbvEval] rules is left
-        as a trust obligation in the manner of [EBeta.trust_betared_pres].  This
-        is the sole non-primitive axiom [cse_transformation] depends on.
+      - Evaluation preservation ([cse_pres]) uses the observational relation
+        [v' = v]: a sharing pass returns the same value.  It reduces to one
+        axiom, [cse_pres_eval], the whole-program CBV simulation, which holds
+        for the strict-guarded selection.  Its algebraic backbone
+        [abstract_subst] is proved; the remaining cross-environment induction
+        over the [EWcbvEval] rules is the sole non-primitive axiom
+        [cse_transformation] depends on.
 
     ---------------------------------------------------------------------------
-    WIRING STEPS LEFT AS NEXT WORK (mirrors how EInstanceSpecialize.v was
-    wired; each shared file below is currently being edited by other agents, so
-    these edits are deliberately NOT applied here to avoid conflicts):
+    PIPELINE INTEGRATION.  Enabling the pass requires the following wiring,
+    mirroring EInstanceSpecialize.v:
 
       1. _CoqProject: add the line
              theories/erasure/ECommonSubexpr.v
@@ -316,7 +308,7 @@ Definition best_candidate (all : list term) (cands : list term) : option term :=
 
     Hoisting emits a [tLetIn] whose body contains a fresh [tRel].  Those two
     node kinds must be permitted by the target [EEnvFlags], otherwise the emitted
-    term is not [wellformed].  We therefore only fire the pass when both
+    term is not [wellformed].  The pass therefore fires only when both
     [has_tLetIn] and [has_tRel] are set; when they are not, [cse_term] is the
     identity and the transform is trivially wellformedness- and
     semantics-preserving.  (In the intended pipeline slot both flags hold.) *)
@@ -772,7 +764,7 @@ Proof.
   - exact Hdecl.
 Qed.
 
-(** ** (2) MAIN WELLFORMEDNESS PRESERVATION (discharges [trust_cse_wf]). *)
+(** ** (2) MAIN WELLFORMEDNESS PRESERVATION. *)
 Lemma cse_wf (efl : EEnvFlags) (p : eprogram) :
   wf_eprogram efl p -> wf_eprogram efl (cse_program efl p).
 Proof.
@@ -781,45 +773,41 @@ Proof.
   - cbn. rewrite wellformed_cse_env. now apply cse_term_wf.
 Qed.
 
-(** ** Transform wrapper (unverified, [Compatible]-class), mirroring
-       EInstanceSpecialize.v and MetaRocq's EBeta.v. *)
+(** ** Transform wrapper ([Compatible]-class), mirroring EInstanceSpecialize.v
+       and MetaRocq's EBeta.v. *)
 
 From MetaRocq.Common Require Import Transform.
 
 (** ** (3) SEMANTICS PRESERVATION.
 
-    CORRECTNESS MODEL AND HONEST STATUS.
+    CORRECTNESS MODEL.
 
-    An earlier version of this file stated the obligation as
-    [eval (cse_env Σ) (cse_term t) (cse_term v)] (obseq [v' = cse_term v]),
-    mirroring [EBeta].  That is WRONG for CSE: [cse_term] is not a congruence
-    (it performs one global hoist), so it does not commute with evaluation, and
-    that statement is in fact false — e.g. for a lambda value [v] with a repeated
-    closed subterm, [cse_term v] is a [tLetIn], which cannot evaluate to itself.
-
-    The correct obseq for a sharing pass is the identity on values, [v' = v]:
-    hoisting a closed subterm that is evaluated on every path, forcing it once in
-    an outer [let], and substituting its value back, yields the SAME value.  The
+    The observational relation for a sharing pass is the identity on values,
+    [v' = v]: hoisting a closed subterm evaluated on every path, forcing it once
+    in an outer [let], and substituting its value back yields the same value.
+    (The congruence-style obseq [v' = cse_term v] used by [EBeta] does not apply
+    here: [cse_term] performs one global hoist, so it is not a congruence and
+    does not commute with evaluation — for a value with a repeated closed
+    subterm, [cse_term v] is a [tLetIn], which cannot evaluate to itself.)  The
     algebraic backbone is proved: [abstract_subst] gives
     [subst0 s (abstract s 0 t) = t] for closed [s]; under [eval_zeta] the [let]
     forces [s] to [s'] and [csubst]s it back, and [closed_subst] turns that
     [csubst] into the [subst] of [abstract_subst].
 
-    SOUNDNESS DISCRIMINATOR.  Hoisting is only sound for subterms evaluated on
-    every path.  [candidate_ok] now enforces this: a candidate must have ALL its
+    SOUNDNESS DISCRIMINATOR.  Hoisting is sound only for subterms evaluated on
+    every path.  [candidate_ok] enforces this: a candidate must have all its
     occurrences in strict (always-evaluated) positions
     ([count_term u all_strict = count_term u all_full]).  Without this guard the
-    pass is UNSOUND — it could lift a subterm out of a [tLambda] body or untaken
-    [tCase] branch and force it eagerly, changing termination (this was a real
-    defect in the earlier unconditional [candidate_ok]).
+    pass would be unsound — it could lift a subterm out of a [tLambda] body or
+    an untaken [tCase] branch and force it eagerly, changing termination.
 
-    [cse_pres_eval] below is the single remaining residual: the whole-program
-    CBV simulation with the correct [v' = v] conclusion.  It is TRUE for the
-    strict-guarded selection above; the remaining work is the cross-environment
-    induction over the [EWcbvEval] rules (relating eval under [Σ] and under
-    [cse_env Σ], threading the strict-position hoist), of the same size as
-    MetaRocq's [EBeta]/[Optimize] evaluation-preservation developments and left
-    as an explicit trust obligation in the manner of [EBeta.trust_betared_pres]. *)
+    [cse_pres_eval] below is the single residual: the whole-program CBV
+    simulation with the [v' = v] conclusion.  It holds for the strict-guarded
+    selection above; the outstanding work is the cross-environment induction
+    over the [EWcbvEval] rules (relating eval under [Σ] and under [cse_env Σ],
+    threading the strict-position hoist), comparable in size to MetaRocq's
+    [EBeta]/[Optimize] evaluation-preservation developments and stated as an
+    explicit axiom in the manner of [EBeta.trust_betared_pres]. *)
 
 Axiom cse_pres_eval :
   forall (efl : EEnvFlags) (wfl : WcbvFlags) (Σ : global_declarations)
@@ -858,8 +846,8 @@ Qed.
 
 Import EProgram EGlobalEnv.
 
-(** ** (4) The transform preserves environment extension (discharges the two
-       [TransformExt] axioms). *)
+(** ** (4) The transform preserves environment extension, discharging both
+       [TransformExt] obligations. *)
 Lemma extends_cse efl Σ Σ' :
   extends Σ Σ' -> extends (cse_env efl Σ) (cse_env efl Σ').
 Proof.

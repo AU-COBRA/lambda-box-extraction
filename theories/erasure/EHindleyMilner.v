@@ -12,7 +12,7 @@
 
     where ExAst declarations additionally carry [box_type] annotations.  The
     REVERSE map [ExAst.trans_env : ExAst.global_env -> EAst.global_context]
-    forgets those annotations and is already used in the verified pipeline
+    forgets those annotations and is used in the verified pipeline
     ([Transforms.trans_env_transform]).
 
     This module builds the FORWARD map
@@ -32,7 +32,7 @@
     the empty context).
 
     ------------------------------------------------------------------------
-    WHAT IS VERIFIED vs. FIRST-CUT
+    VERIFICATION STATUS
 
     - VERIFIED (Qed, no admits, no added axioms):
         [infer_section : forall D Σ, trans_env (infer D Σ) = Σ].
@@ -43,33 +43,32 @@
       affects discarded type fields).  Supporting structural facts
       [infer_kernames] and [infer_has_deps] are also [Qed].
 
-    - EVALUATION PRESERVATION (not re-proved here, and it need not be): once we
-      have [trans_env (infer D Σ) = Σ], observational/evaluation equivalence of
-      the typed program with its untyped image is exactly the statement already
+    - EVALUATION PRESERVATION is not re-proved here, and need not be: given
+      [trans_env (infer D Σ) = Σ], observational/evaluation equivalence of the
+      typed program with its untyped image is exactly the statement already
       established for [trans_env] in the verified pipeline
       ([Transforms.trans_env_transform], whose [obseq] is [v' = v]).  Composing
       that transform after [infer] transports evaluation with no fresh proof.
-      We record this as [Lemma eval_preserved_via_section] (a schematic
-      restatement, proved from [infer_section] by rewriting).
+      [Lemma eval_preserved_via_section] packages that transport as a rewrite
+      along [infer_section].
 
-    - FIRST-CUT / UNVERIFIED: the inference ALGORITHM itself (the [box_type]s it
-      assigns) is a first cut.  We do NOT claim principality or completeness —
-      known not to hold on all of λ□ (□ residue, polymorphic recursion,
-      unrepresentable types).  Wherever HM cannot assign a principal ML type we
-      fall back to [TAny] (⊤ / success-typing style), keeping [infer] TOTAL.
+    - The inference ALGORITHM itself (the [box_type]s it assigns) does not
+      claim principality or completeness; these do not hold on all of λ□ (□
+      residue, polymorphic recursion, unrepresentable types).  Wherever HM
+      cannot assign a principal ML type, inference falls back to [TAny] (⊤ /
+      success-typing style), keeping [infer] TOTAL.
 
     ------------------------------------------------------------------------
-    WHAT IMPROVED IN THIS REVISION (vs. the one-pass first cut)
+    INFERENCE ALGORITHM
 
-    1. UNIFICATION is now a proper idempotent substitution-map solver with
-       occurs-check.  [extend] fully zonks the right-hand side against the
-       current (idempotent) substitution, runs the occurs-check, and then
-       applies the new binding to the codomains of all existing bindings.  This
-       maintains the invariant that the substitution is IDEMPOTENT, so a single
-       structural [zonk] pass is a FULL zonk (all chains resolved).  [unify]
-       also handles [TInd]/[TConst] (needed once datatype/constant types flow
-       in).  Fuel-bounded purely for structural termination; out-of-fuel is a
-       (total) unification failure → [TAny].
+    1. UNIFICATION is an idempotent substitution-map solver with occurs-check.
+       [extend] fully zonks the right-hand side against the current (idempotent)
+       substitution, runs the occurs-check, and applies the new binding to the
+       codomains of all existing bindings.  This maintains the invariant that
+       the substitution is IDEMPOTENT, so a single structural [zonk] pass is a
+       FULL zonk (all chains resolved).  [unify] handles [TInd]/[TConst] so
+       datatype/constant types unify.  It is fuel-bounded for structural
+       termination; out-of-fuel is a (total) unification failure → [TAny].
 
     2. CROSS-CONSTANT SCHEME PROPAGATION.  Constants are processed in dependency
        (topological) order — [infer_go] recurses on the tail FIRST, and an
@@ -77,15 +76,13 @@
        tail already holds every dependency's scheme.  Each constant's inferred
        type is Damas–Milner GENERALIZED ([generalize_ty]) and recorded in a
        scheme table; at every [tConst] use-site the scheme is INSTANTIATED with
-       fresh variables ([instantiate]).  (Previously every [tConst] became a
-       fresh variable, losing all cross-function typing.)  Constants not yet in
-       the table — e.g. forward/mutual references across the ordering — still
-       degrade gracefully to a fresh variable, keeping [infer] total.
+       fresh variables ([instantiate]).  A constant absent from the table — e.g.
+       a forward/mutual reference across the ordering — degrades gracefully to a
+       fresh variable, keeping [infer] total.
 
     3. DATATYPE-DRIVEN TERM INFERENCE from GIVEN signatures.  [infer] takes a
        [dt_sigs] parameter supplying, per inductive, constructor argument/result
-       [box_type]s and projection field types.  Using it, [infer_tm] now gives
-       genuine types to
+       [box_type]s and projection field types.  Using it, [infer_tm] types
          tConstruct  (unify args against constructor arg types; partial
                       application yields the residual arrow),
          tCase       (branch binders typed from constructor arg types; all
@@ -93,56 +90,48 @@
          tProj       (field type from the projection signature),
          tFix        (MONOMORPHIC recursion: one fresh var per fixpoint, bodies
                       checked against them),
-       in addition to the previously-covered
+       alongside
          tBox, tRel, tLambda, tApp, tLetIn, tConst.
-       [TAny] now denotes genuine residue only: erased/□ content, missing
+       [TAny] denotes genuine residue only: erased/□ content, missing
        signatures, out-of-fragment nodes (tCoFix, tEvar, tVar, tPrim, tLazy,
-       tForce), or a unification/fuel failure.  [empty_sigs] recovers the old
-       behaviour (every datatype node → [TAny]).
+       tForce), or a unification/fuel failure.  [empty_sigs] supplies no
+       signatures, so [tConstruct] and [tProj] yield [TAny] and [tCase] branch
+       binders are [TAny] (the [tCase] result and [tFix] variables remain fresh
+       unification variables, which do not consult [D]).
 
-    4. TOWARD λ□ᵀ WELL-FORMEDNESS.  The MetaRocq install imported here exposes no
+    4. TOWARD λ□ᵀ WELL-FORMEDNESS.  The imported MetaRocq install exposes no
        [check_wf_typed_program] predicate, so a full "output is a well-typed
-       λ□ᵀ program" lemma is stated as a RESIDUAL (see next-steps).  What IS
-       proved here structurally: [infer_kernames] (kernames + order preserved)
-       and [infer_has_deps] (every emitted declaration carries [has_deps=true]).
-       Together with [infer_section] these are the well-formedness facts the
-       pipeline gate actually consumes; the remaining ExAst-only typing residue
-       (the [box_type] annotations being coherent) is exactly what [trans_env]
+       λ□ᵀ program" lemma is not available here.  What IS proved structurally:
+       [infer_kernames] (kernames + order preserved) and [infer_has_deps] (every
+       emitted declaration carries [has_deps=true]).  Together with
+       [infer_section] these are the structural well-formedness facts the
+       pipeline gate consumes; the remaining ExAst-only typing content
+       (coherence of the [box_type] annotations) is exactly what [trans_env]
        discards and hence cannot be transported by the section law.
 
-    NOTE ON THE INDUCTIVE-BODY DECORATION: [infer_oib] still records [TAny] for
-    the constructor-argument and projection type fields OF THE INDUCTIVE BODY.
+    INDUCTIVE-BODY DECORATION: [infer_oib] records [TAny] for the
+    constructor-argument and projection type fields OF THE INDUCTIVE BODY.
     Those fields are discarded by [trans_env] and the untyped inductive body
     carries no type information to recover them from; the GIVEN signatures [D]
-    are instead consumed where they matter for typing — at the term use-sites
-    above.  Refining the body decoration from [D] as well is a mechanical
-    extension (thread the inductive identity into [infer_oib]); it is left out
-    to keep the decoration path free of index bookkeeping.
+    are consumed where they matter for typing — at the term use-sites above.
+    Refining the body decoration from [D] would thread the inductive identity
+    into [infer_oib]; it is omitted to keep the decoration path free of index
+    bookkeeping.
 
     ------------------------------------------------------------------------
-    PIPELINE WIRING — NEXT STEPS (not done here; touches shared files owned by
-    other agents, so deliberately left as documentation):
+    PIPELINE INTEGRATION.  [PAst.v] [PAst_to_ExAst] promotes untyped
+    (lambda-box) input into the typed world with [infer empty_sigs env], and
+    [Pipeline.v] runs [infer numeric_sigs env] on the raw environment before the
+    typed pipeline for the typed backends (Rust, Elm).  The section lemma
+    licenses this: it guarantees the promoted environment erases back to the
+    original untyped one, so the untyped correctness results transfer.
 
-    1. [PAst.v] [PAst_to_ExAst]: replace the current
-         | Untyped env _ => Err "Cannot convert untyped program to a typed program"
-       arm with
-         | Untyped env t => Ok (infer D env)        (* + splice [t] as a fresh main *)
-       so an untyped program can be promoted into the typed world.
-
-    2. [Pipeline.v]: add the Untyped→Typed gate that runs [infer] and then the
-       existing [typed_transform_pipeline] / [typed_to_untyped_transform_pipeline].
-       The section lemma is what licenses that gate: it guarantees the promoted
-       environment erases back to the original untyped one, so the untyped
-       correctness results transfer.
-
-    3. RESIDUAL (item 4): once a [check_wf_typed_program]-style predicate is in
-       scope (it is absent from the imported MetaRocq), prove that [infer D Σ]
-       satisfies it — i.e. that the inferred [box_type] annotations are coherent
-       (well-scoped tvars, arities matching, schemes instantiable).  This is the
-       ExAst-only content the section law cannot transport.  Refining
-       [infer_oib] from [D] (see note above) is a prerequisite for the
-       datatype-body part of that predicate.
-    ------------------------------------------------------------------------ *)
+    What the section law does NOT transport is the ExAst-only content: that the
+    inferred [box_type] annotations are coherent (well-scoped type variables,
+    matching arities, instantiable schemes).  A [check_wf_typed_program]-style
+    predicate would state this, but none is present in the imported MetaRocq,
+    and [infer_oib] would first need to consult [D] for datatype bodies rather
+    than emitting [TAny] (see the decoration note above). *)
 
 From Stdlib Require Import List Arith.
 From MetaRocq.Utils Require Import utils.
@@ -339,8 +328,7 @@ Definition empty_sigs : dt_sigs :=
     recursing structurally on the term/list, with recursive calls sitting inside
     [match unify unify_fuel …], forces the guard/termination checker to WHNF-
     reduce [unify] at the *literal* fuel (1000) while validating the mutual
-    block — which is pathologically slow (the previous revision of this file did
-    not compile in bounded time for that reason).  We avoid it two ways:
+    block, which is pathologically slow.  Two devices avoid it:
 
     (a) The list traversals ([go_args]/[go_brs]/[go_mfix]) are ordinary,
         NON-mutual [Fixpoint]s over their list, parameterised by the term-
@@ -447,7 +435,7 @@ Fixpoint infer_tm (fuel : nat) (D : dt_sigs) (E : sch_env)
     | EAst.tConst kn =>
       match sch_lookup E kn with
       | Some sch => let '(ty, c1) := instantiate cnt sch in (ty, s, c1)
-      | None => (ExAst.TVar cnt, s, S cnt)   (* not yet inferred: fresh var *)
+      | None => (ExAst.TVar cnt, s, S cnt)   (* not in scheme table: fresh var *)
       end
     | EAst.tConstruct ind n args =>
       let '(argtys, s1, c1) := go_args (infer_tm fuel D E) ctx cnt s args in
@@ -643,23 +631,23 @@ Qed.
     vice versa, because the two are equal.  In particular, whatever
     evaluation/observational equivalence [trans_env_transform] proves for
     [trans_env (infer D Σ)] holds verbatim for [Σ]; no fresh evaluation proof
-    is needed.  We package that transport here. *)
+    is needed.  [eval_preserved_via_section] packages that transport. *)
 Lemma eval_preserved_via_section
       (P : EAst.global_context -> Prop) (D : dt_sigs) (Σ : EAst.global_context) :
   P (ExAst.trans_env (infer D Σ)) <-> P Σ.
 Proof. rewrite infer_section. reflexivity. Qed.
 
-(** Sanity: the whole forward map preserves the untyped skeleton, stated as the
-    equality actually consumed by pipeline wiring. *)
+(** The whole forward map preserves the untyped skeleton, stated as the
+    equality the pipeline wiring relies on. *)
 Corollary infer_erases_back (D : dt_sigs) (Σ : EAst.global_context) :
   ExAst.trans_env (infer D Σ) = Σ.
 Proof. exact (infer_section D Σ). Qed.
 
-(** ** Structural well-formedness facts (toward λ□ᵀ well-typedness, item 4)
+(** ** Structural well-formedness facts (toward λ□ᵀ well-typedness)
 
-    A full [check_wf_typed_program]-style lemma is a residual (that predicate is
-    absent from the imported MetaRocq; see the header).  These are the
-    structural well-formedness facts the pipeline gate actually consumes. *)
+    A full [check_wf_typed_program]-style lemma is out of reach here (that
+    predicate is absent from the imported MetaRocq; see the header).  These are
+    the structural well-formedness facts the pipeline gate relies on. *)
 
 (** Kernames and their order are preserved exactly. *)
 Lemma infer_kernames (D : dt_sigs) (Σ : EAst.global_context) :
