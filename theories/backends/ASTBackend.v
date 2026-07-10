@@ -41,6 +41,7 @@ Definition ast_phases := {|
   dearg_ctors_c    := Compatible false;
   dearg_consts_c   := Compatible false;
   specialize_instances_c := Compatible false;
+  cse_c            := Compatible false;
 |}.
 
 Definition extract_untyped_ast (p : EAst.program)

@@ -17,6 +17,8 @@ theories/erasure/ErasureTyped.v
 theories/erasure/Transforms.v
 theories/erasure/EImplementLazyForce.v
 theories/erasure/EInstanceSpecialize.v
+theories/erasure/EInstanceSpecializeTyped.v
+theories/erasure/ECommonSubexpr.v
 theories/erasure/EHindleyMilner.v
 theories/erasure/EHMNumericSigs.v
 

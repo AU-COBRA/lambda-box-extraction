@@ -10,6 +10,7 @@ From MetaRocq.ErasurePlugin Require Import ETransform Erasure.
 From MetaRocq.Erasure Require EImplementBox.
 From Peregrine Require EImplementLazyForce.
 From Peregrine Require Import EInstanceSpecialize.
+From Peregrine Require Import ECommonSubexpr.
 From Malfunction Require Pipeline.
 
 Import PCUICProgram.
@@ -131,32 +132,41 @@ Proof.
 Qed.
 
 
-Program Definition extra_unsafe_transforms (spec_inst impl_box impl_lazy_force : bool) :=
+Program Definition extra_unsafe_transforms (spec_inst cse impl_box impl_lazy_force : bool) :=
   let efl := EConstructorsAsBlocks.switch_cstr_as_blocks
   (EInlineProjections.disable_projections_env_flag (ERemoveParams.switch_no_params EWellformed.all_env_flags)) in
   (* Instance/dictionary specialization runs first, in the same
      constructors-as-blocks lambda-box regime as [implement_box], so that the
      subsequent betared (in [optional_unsafe_transforms]) and dead-argument
-     elimination can clean up the exposed dictionary plumbing. *)
+     elimination can clean up the exposed dictionary plumbing. Common-
+     subexpression elimination runs next, in the same regime, restoring the
+     sharing that erasure drops. *)
   ETransform.optional_self_transform spec_inst
     (specialize_instances_transformation efl EImplementBox.block_wcbv_flags) ▷
+  ETransform.optional_self_transform cse
+    (cse_transformation efl EImplementBox.block_wcbv_flags) ▷
   ETransform.optional_self_transform impl_box implement_box_transformation ▷
   ETransform.optional_self_transform impl_lazy_force implement_lazy_force_transformation.
 Next Obligation.
   cbn. intros.
-  destruct spec_inst, impl_box, impl_lazy_force; cbn in *;
+  destruct spec_inst, cse, impl_box, impl_lazy_force; cbn in *;
     try assumption; try (apply switch_off_box_wf_eprogram; assumption).
 Qed.
 Next Obligation.
   cbn. intros.
-  destruct spec_inst, impl_box, impl_lazy_force; cbn in *;
+  destruct spec_inst, cse, impl_box, impl_lazy_force; cbn in *;
+    try assumption; try (apply switch_off_box_wf_eprogram; assumption).
+Qed.
+Next Obligation.
+  cbn. intros.
+  destruct spec_inst, cse, impl_box, impl_lazy_force; cbn in *;
     try assumption; try (apply switch_off_box_wf_eprogram; assumption).
 Qed.
 
 
 
 Program Definition untyped_transform_pipeline {guard : abstract_guard_impl}
-  (efl := all_env_flags) econf spec_inst impl_box impl_lazy_force
+  (efl := all_env_flags) econf spec_inst cse impl_box impl_lazy_force
   : Transform.t _ _ _ EAst.term _ _
    (* Standard evaluation, with cases on prop, guarded fixpoints, applied constructors *)
    (eval_eprogram_mapping EWcbvEval.default_wcbv_flags)
@@ -165,7 +175,7 @@ Program Definition untyped_transform_pipeline {guard : abstract_guard_impl}
   rebuild_wf_env_transform_mapping true true ▷
   verified_lambdabox_pipeline_mapping ▷
   optional_unsafe_transforms econf ▷
-  extra_unsafe_transforms spec_inst impl_box impl_lazy_force.
+  extra_unsafe_transforms spec_inst cse impl_box impl_lazy_force.
 Next Obligation.
   cbn. intros.
   destruct H as [? [? ?]].
@@ -181,7 +191,7 @@ Final Obligation.
   cbn. intros.
   destruct enable_unsafe.
   cbn in H.
-  destruct betared, spec_inst, impl_box, impl_lazy_force; auto.
+  destruct betared, spec_inst, cse, impl_box, impl_lazy_force; auto.
 Qed.
 
 
@@ -344,7 +354,7 @@ Qed.
 
 
 Program Definition typed_to_untyped_transform_pipeline {guard : abstract_guard_impl}
-  (efl := EWellformed.all_env_flags) econf spec_inst impl_box impl_lazy_force
+  (efl := EWellformed.all_env_flags) econf spec_inst cse impl_box impl_lazy_force
   : Transform.t _ _ _ _ _ _
    (eval_typed_eprogram_mapping EWcbvEval.default_wcbv_flags)
    (EProgram.eval_eprogram final_wcbv_flags) :=
@@ -353,7 +363,7 @@ Program Definition typed_to_untyped_transform_pipeline {guard : abstract_guard_i
    trans_env_transform ▷
    rebuild_wf_env_transform_mapping true true ▷
    verified_lambdabox_typed_pipeline econf ▷
-   extra_unsafe_transforms spec_inst impl_box impl_lazy_force.
+   extra_unsafe_transforms spec_inst cse impl_box impl_lazy_force.
 Next Obligation.
   intros.
   cbn in *.
@@ -376,12 +386,12 @@ Final Obligation.
   cbn. intros.
   destruct enable_unsafe.
   cbn in H.
-  destruct betared, spec_inst, impl_box, impl_lazy_force; auto.
+  destruct betared, spec_inst, cse, impl_box, impl_lazy_force; auto.
 Qed.
 
 
-Program Definition run_untyped_transforms econf ind_reorder spec_inst impl_box impl_lazy_force p :=
-  run (untyped_transform_pipeline econf spec_inst impl_box impl_lazy_force) (ind_reorder, p) _.
+Program Definition run_untyped_transforms econf ind_reorder spec_inst cse impl_box impl_lazy_force p :=
+  run (untyped_transform_pipeline econf spec_inst cse impl_box impl_lazy_force) (ind_reorder, p) _.
 Final Obligation.
 Admitted. (* assumed for now, check_wf should ensure this *)
 
@@ -390,7 +400,7 @@ Program Definition run_typed_transforms econf ind_reorder p :=
 Final Obligation.
 Admitted. (* assumed for now, check_wf should ensure this *)
 
-Program Definition run_typed_to_untyped_transforms econf ind_reorder spec_inst impl_box impl_lazy_force p :=
-  run (typed_to_untyped_transform_pipeline econf spec_inst impl_box impl_lazy_force) (ind_reorder, p) _.
+Program Definition run_typed_to_untyped_transforms econf ind_reorder spec_inst cse impl_box impl_lazy_force p :=
+  run (typed_to_untyped_transform_pipeline econf spec_inst cse impl_box impl_lazy_force) (ind_reorder, p) _.
 Final Obligation.
 Admitted. (* assumed for now, check_wf should ensure this *)

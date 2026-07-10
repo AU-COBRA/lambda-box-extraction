@@ -34,6 +34,7 @@ Definition ocaml_phases := {|
   dearg_ctors_c    := Compatible true;
   dearg_consts_c   := Compatible true;
   specialize_instances_c := Compatible false;
+  cse_c            := Compatible false;
 |}.
 
 
