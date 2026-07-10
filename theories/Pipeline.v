@@ -3,6 +3,8 @@ From Peregrine Require Import PAst.
 From Peregrine Require Import Config.
 From Peregrine Require Import ConfigUtils.
 From Peregrine Require Import Transforms.
+From Peregrine Require Import EHindleyMilner.
+From Peregrine Require Import EHMNumericSigs.
 From Peregrine Require Import Erasure.
 From Peregrine Require Import CheckWf.
 From Peregrine Require RustBackend.
@@ -72,12 +74,14 @@ Definition check_wf (p : PAst) : result' unit :=
 
 Definition validate_ast_type (c : config) (p : PAst) : result' unit :=
   match c.(backend_opts) with
-  | Rust _ => assert (is_typed_ast p) "Rust extraction requires typed lambda box input"
-  | Elm _ => assert (is_typed_ast p) "Elm extraction requires typed lambda box input"
+  (* Untyped (lambda-box) input is accepted for the typed backends: [PAst_to_ExAst]
+     bridges it to lambda-box-typed via the verified HM section [infer]. *)
+  | Rust _ => Ok tt
+  | Elm _ => Ok tt
   | C _ | Wasm _ | OCaml _ | CakeML _ | Lean _ | Eval _ => Ok tt
   | AST c =>
     match c.(ast_type) with
-    | LambdaBoxTyped => assert (is_typed_ast p) "Extraction requires typed lambda box input"
+    | LambdaBoxTyped => Ok tt
     | _ => Ok tt
     end
   end.
@@ -98,24 +102,36 @@ Definition apply_transforms (c : config) (p : PAst) (typed : bool) : result' PAs
   let cstr_reorder := mk_cstr_reorders c in
   let impl_box := c.(erasure_opts).(implement_box) in
   let impl_lazy := c.(erasure_opts).(implement_lazy) in
+  let spec_inst := c.(erasure_opts).(specialize_instances) in
   match p, typed with
-  | Untyped env (Some t), _ =>
-      let (env', t') := run_untyped_transforms econf cstr_reorder impl_box impl_lazy (env, t) in
+  | Untyped env (Some t), true =>
+      (* Typed backend on untyped (lambda-box) input: bridge to typed via the
+         verified HM section [infer] on the *raw* env (before the untyped
+         pipeline turns constructors into blocks, which the typed backends do
+         not consume), then run the typed pipeline, which preserves applied
+         constructors.  [infer_section] gives [trans_env (infer env) = env]. *)
+      let '(_, (env', t')) := run_typed_transforms econf cstr_reorder (infer numeric_sigs env, t) in
+      Ok (Typed env' (Some t'))
+  | Untyped env None, true =>
+      let '(_, (env', _)) := run_typed_transforms econf cstr_reorder (infer numeric_sigs env, EAst.tBox) in
+      Ok (Typed env' None)
+  | Untyped env (Some t), false =>
+      let (env', t') := run_untyped_transforms econf cstr_reorder spec_inst impl_box impl_lazy (env, t) in
       Ok (Untyped env' (Some t'))
-  | Untyped env None, _ =>
-      let (env', _) := run_untyped_transforms econf cstr_reorder impl_box impl_lazy (env, EAst.tBox) in
+  | Untyped env None, false =>
+      let (env', _) := run_untyped_transforms econf cstr_reorder spec_inst impl_box impl_lazy (env, EAst.tBox) in
       Ok (Untyped env' None)
   | Typed env (Some t), true =>
       let '(_, (env', t')) := run_typed_transforms econf cstr_reorder (env, t) in
       Ok (Typed env' (Some t'))
   | Typed env (Some t), false =>
-      let (env', t') := run_typed_to_untyped_transforms econf cstr_reorder impl_box impl_lazy (env, t) in
+      let (env', t') := run_typed_to_untyped_transforms econf cstr_reorder spec_inst impl_box impl_lazy (env, t) in
       (Ok (Untyped env' (Some t')))
   | Typed env None, true =>
       let '(_, (env', _)) := run_typed_transforms econf cstr_reorder (env, EAst.tBox) in
       Ok (Typed env' None)
   | Typed env None, false =>
-      let (env', _) := run_typed_to_untyped_transforms econf cstr_reorder impl_box impl_lazy (env, EAst.tBox) in
+      let (env', _) := run_typed_to_untyped_transforms econf cstr_reorder spec_inst impl_box impl_lazy (env, EAst.tBox) in
       (Ok (Untyped env' None))
   end.
 

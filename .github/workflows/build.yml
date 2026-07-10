@@ -34,12 +34,12 @@ jobs:
         ocaml_version: ["4.14.2"] #, "5.3.0"]
     steps:
       - name: Checkout branch ${{ github.ref_name }}
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - run: sudo apt-get update
       - name: Restore opam cache
         id: opam-cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: "~/.opam"
           key: opam-${{matrix.ocaml_version}}-${{hashFiles('.github/rocq-peregrine.opam.locked')}}
@@ -98,7 +98,7 @@ jobs:
           cabal-version: ${{env.CABAL_VERSION}}
 
       - name: Checkout agda2lambox
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: 4ever2/agda2lambox
           ref: 20120b78af01b7bec1c8d46ba8dceef140d65fb6
@@ -110,7 +110,7 @@ jobs:
           cabal configure --disable-documentation && \
           cabal build all --dry-run
       - name: Restore cached Haskell dependencies
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         id: haskell-cache
         env:
           key: ${{ runner.os }}-${{ env.GHC_VERSION }}-${{ env.CABAL_VERSION }}
@@ -123,7 +123,7 @@ jobs:
         if: steps.haskell-cache.outputs.cache-hit != 'true'
         run: cd agda && cabal build all --only-dependencies
       - name: Save cached dependencies
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         if: steps.haskell-cache.outputs.cache-hit != 'true'
         with:
           path: ${{ steps.haskell-setup.outputs.cabal-store }}

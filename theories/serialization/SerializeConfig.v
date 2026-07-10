@@ -279,7 +279,8 @@ Instance Serialize_erasure_phases : Serialize erasure_phases :=
      to_sexp (betared o);
      to_sexp (unboxing o);
      to_sexp (dearg_ctors o);
-     to_sexp (dearg_consts o)
+     to_sexp (dearg_consts o);
+     to_sexp (specialize_instances o)
     ]%sexp.
 
 Instance Serialize_erasure_phases' : Serialize erasure_phases' :=
@@ -291,7 +292,8 @@ Instance Serialize_erasure_phases' : Serialize erasure_phases' :=
      to_sexp (betared' o);
      to_sexp (unboxing' o);
      to_sexp (dearg_ctors' o);
-     to_sexp (dearg_consts' o)
+     to_sexp (dearg_consts' o);
+     to_sexp (specialize_instances' o)
     ]%sexp.
 
 Instance Serialize_config : Serialize config :=

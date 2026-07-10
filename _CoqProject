@@ -16,12 +16,19 @@ theories/erasure/Erasure.v
 theories/erasure/ErasureTyped.v
 theories/erasure/Transforms.v
 theories/erasure/EImplementLazyForce.v
+theories/erasure/EInstanceSpecialize.v
+theories/erasure/EHindleyMilner.v
+theories/erasure/EHMNumericSigs.v
 
 theories/lean/LeanIR.v
 theories/lean/LeanCompile.v
 theories/lean/PrintLean.v
 
 theories/backends/RustBackend.v
+theories/backends/RustGMPRemaps.v
+theories/backends/RustNativeRemaps.v
+theories/backends/RustMixedRemaps.v
+theories/backends/RustMixedCoherence.v
 theories/backends/ElmBackend.v
 theories/backends/OCamlBackend.v
 theories/backends/CakeMLBackend.v

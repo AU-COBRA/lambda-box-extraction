@@ -89,4 +89,5 @@ test/**/*.anf
 *.h
 *.mlf
 *.cml
+.claude/
 /.lake
