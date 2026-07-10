@@ -42,7 +42,11 @@
 
     Specializations are memoised by the key [(callee, dicts)] and the whole
     saturation is bounded by [specialize_fuel]; the loop re-scans each freshly
-    emitted body so chained dictionary plumbing is specialized too.
+    emitted body, and [redirect] is then applied to the generated bodies as
+    well as the original environment, so a chained call inside a generated body
+    (a specialized body that itself passes a dictionary to another constant) is
+    rewritten to the emitted [g$specM] rather than left pointing at the
+    original callee.
 
     ------------------------------------------------------------------------
     VERIFICATION STRUCTURE.
@@ -370,7 +374,8 @@ Definition drive_untyped (Σ : EAst.global_context) (main : term) : eprogram :=
   let red := map (fun '(kn, d) => (kn, redirect_decl Σ seen d)) Σ in
   let gen_u :=
     map (fun '(fn, _, body) =>
-           (fn, EAst.ConstantDecl {| EAst.cst_body := Some body |})) gen in
+           (fn, redirect_decl Σ seen
+                  (EAst.ConstantDecl {| EAst.cst_body := Some body |}))) gen in
   (red ++ gen_u, specialize_instances (redirect Σ seen [] main)).
 
 (* ------------------------------------------------------------------------ *)
@@ -412,7 +417,9 @@ Definition specialize_program_typed (Σ : ExAst.global_env) (main : term)
   let '(seen, gen) := analysis Σu main in
   let red := map (fun '(kn, b, d) => (kn, b, redirect_decl_typed Σu seen d)) Σ in
   let gen_t :=
-    map (fun '(fn, callee, body) => (fn, false, spec_typed_decl Σ callee body)) gen in
+    map (fun '(fn, callee, body) =>
+           (fn, false, redirect_decl_typed Σu seen (spec_typed_decl Σ callee body)))
+        gen in
   (red ++ gen_t, specialize_instances (redirect Σu seen [] main)).
 
 (** Erase a typed program to the untyped level eval is defined on. *)
@@ -452,11 +459,14 @@ Proof.
   apply (trans_redirect_decl_typed Σu seen kn b d).
 Qed.
 
-Lemma trans_env_gen (Σ : ExAst.global_env) (gen : list gentriple) :
+Lemma trans_env_gen (Σu : EAst.global_context) (seen : list (dkey × kername))
+  (Σ : ExAst.global_env) (gen : list gentriple) :
   trans_env (map (fun '(fn, callee, body) =>
-                    (fn, false, spec_typed_decl Σ callee body)) gen)
+                    (fn, false, redirect_decl_typed Σu seen (spec_typed_decl Σ callee body)))
+                 gen)
   = map (fun '(fn, _, body) =>
-           (fn, EAst.ConstantDecl {| EAst.cst_body := Some body |})) gen.
+           (fn, redirect_decl Σu seen
+                  (EAst.ConstantDecl {| EAst.cst_body := Some body |}))) gen.
 Proof.
   unfold trans_env.
   rewrite !map_map.
@@ -526,3 +536,8 @@ Qed.
     scoped residual [untyped_drive_correct] (plus ambient logical axioms, if
     any, from the imported libraries). *)
 Print Assumptions typed_specialize_pres.
+
+(** The commutation theorem itself carries no residual: its assumptions are
+    only the ambient primitive-integer/string/float axiomatization of the
+    imported MetaRocq libraries, never [untyped_drive_correct]. *)
+Print Assumptions specialize_commutes.
