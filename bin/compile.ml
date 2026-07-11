@@ -44,6 +44,11 @@ let write_wasm_res opts f p =
   let p = caml_string_of_bytestring p in
   write_res f (fun f -> output_string f p)
 
+let write_llvm_res opts f p =
+  let f = get_out_file opts f "ll" in
+  let p = caml_string_of_bytestring p in
+  write_res f (fun f -> output_string f p)
+
 let write_elm_res opts f p =
   let f = get_out_file opts f "elm" in
   let p = caml_string_of_bytestring p in
@@ -95,6 +100,7 @@ let write_program opts f p =
   | Pipeline.CakeMLProgram p -> write_cakeml_res opts f p
   | Pipeline.CProgram p -> write_c_res opts f p
   | Pipeline.WasmProgram p -> write_wasm_res opts f p
+  | Pipeline.LLVMProgram p -> write_llvm_res opts f p
   | Pipeline.EvalProgram p -> cprint_endline p
   | Pipeline.ASTProgram p -> write_ast_res opts f p
 
@@ -252,6 +258,10 @@ let compile_c opts copts eopts f_prog =
 
 let compile_wasm opts copts eopts f_prog =
   let b_opts = ConfigUtils.Wasm' (mk_certirocq_config copts) in
+  compile_backend b_opts opts eopts f_prog
+
+let compile_llvm opts copts eopts f_prog =
+  let b_opts = ConfigUtils.LLVM' (mk_certirocq_config copts) in
   compile_backend b_opts opts eopts f_prog
 
 let compile_ast opts copts eopts t f_prog =

@@ -13,6 +13,7 @@ From Peregrine Require Import OCamlBackend.
 From Peregrine Require Import CakeMLBackend.
 From Peregrine Require Import CBackend.
 From Peregrine Require Import WasmBackend.
+From Peregrine Require Import LLVMBackend.
 From Peregrine Require Import EvalBackend.
 From Peregrine Require Import ASTBackend.
 
@@ -156,6 +157,7 @@ Section BackendConfigOptional.
   Definition c_config' : Type := certirocq_config'.
 
   Definition wasm_config' : Type := certirocq_config'.
+  Definition llvm_config' : Type := certirocq_config'.
 
   (* OCaml *)
   Record ocaml_config' := {
@@ -225,6 +227,7 @@ Section BackendConfigOptional.
   | Elm'    : elm_config' -> backend_config'
   | C'      : c_config' -> backend_config'
   | Wasm'   : wasm_config' -> backend_config'
+  | LLVM'   : llvm_config' -> backend_config'
   | OCaml'  : ocaml_config' -> backend_config'
   | CakeML' : cakeml_config' -> backend_config'
   | Eval'   : eval_config' -> backend_config'
@@ -235,6 +238,7 @@ Section BackendConfigOptional.
     | Elm' o    => Elm (mk_elm_config o)
     | C' o      => C (mk_certirocq_config default_c_config o)
     | Wasm' o   => Wasm (mk_certirocq_config default_wasm_config o)
+    | LLVM' o   => LLVM (mk_certirocq_config default_llvm_config o)
     | OCaml' o  => OCaml (mk_ocaml_config o)
     | CakeML' o => CakeML (mk_cakeml_config o)
     | Eval' o   => Eval (mk_eval_config o)
@@ -315,6 +319,7 @@ Section GeneralConfigOptional.
       | Elm' _    => get_default_phases_opt elm_phases
       | C' _      => get_default_phases_opt c_phases
       | Wasm' _   => get_default_phases_opt wasm_phases
+      | LLVM' _   => get_default_phases_opt llvm_phases
       | OCaml' _  => get_default_phases_opt ocaml_phases
       | CakeML' _ => get_default_phases_opt cakeml_phases
       | Eval' _   => get_default_phases_opt eval_phases
@@ -327,6 +332,7 @@ Section GeneralConfigOptional.
       | Elm' _    => enforce_phases o def_opt elm_phases
       | C' _      => enforce_phases o def_opt c_phases
       | Wasm' _   => enforce_phases o def_opt wasm_phases
+      | LLVM' _   => enforce_phases o def_opt llvm_phases
       | OCaml' _  => enforce_phases o def_opt ocaml_phases
       | CakeML' _ => enforce_phases o def_opt cakeml_phases
       | Eval' _   => enforce_phases o def_opt eval_phases
@@ -423,6 +429,12 @@ Section GeneralConfigOptional.
   Definition is_wasm_config (o : config) : bool :=
     match o.(backend_opts) with
     | Wasm _ => true
+    | _ => false
+    end.
+
+  Definition is_llvm_config (o : config) : bool :=
+    match o.(backend_opts) with
+    | LLVM _ => true
     | _ => false
     end.
 

@@ -136,6 +136,7 @@ Instance Deserialize_backend_config : Deserialize backend_config :=
         ("Elm", Deser.con_ Elm);
         ("C", Deser.con_ C);
         ("Wasm", Deser.con_ Wasm);
+        ("LLVM", Deser.con_ LLVM);
         ("OCaml", Deser.con_ OCaml);
         ("CakeML", Deser.con_ CakeML);
         ("Eval", Deser.con_ Eval);
@@ -150,6 +151,7 @@ Instance Deserialize_backend_config' : Deserialize backend_config' :=
         ("Elm", Deser.con_ Elm');
         ("C", Deser.con_ C');
         ("Wasm", Deser.con_ Wasm');
+        ("LLVM", Deser.con_ LLVM');
         ("OCaml", Deser.con_ OCaml');
         ("CakeML", Deser.con_ CakeML');
         ("Eval", Deser.con_ Eval');

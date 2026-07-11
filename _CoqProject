@@ -30,6 +30,7 @@ theories/backends/OCamlBackend.v
 theories/backends/CakeMLBackend.v
 theories/backends/CBackend.v
 theories/backends/WasmBackend.v
+theories/backends/LLVMBackend.v
 theories/backends/CertiRocqBackend.v
 theories/backends/EvalBackend.v
 theories/backends/ASTBackend.v

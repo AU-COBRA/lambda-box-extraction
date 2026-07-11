@@ -12,6 +12,7 @@ From Peregrine Require ElmBackend.
 From Peregrine Require OCamlBackend.
 From Peregrine Require CBackend.
 From Peregrine Require WasmBackend.
+From Peregrine Require LLVMBackend.
 From Peregrine Require EvalBackend.
 From Peregrine Require ASTBackend.
 From Peregrine Require NameSanitize.
@@ -77,7 +78,7 @@ Definition validate_ast_type (c : config) (p : PAst) : result' unit :=
      bridges it to lambda-box-typed via the verified HM section [infer]. *)
   | Rust _ => Ok tt
   | Elm _ => Ok tt
-  | C _ | Wasm _ | OCaml _ | CakeML _ | Eval _ => Ok tt
+  | C _ | Wasm _ | LLVM _ | OCaml _ | CakeML _ | Eval _ => Ok tt
   | AST c =>
     match c.(ast_type) with
     | LambdaBoxTyped => Ok tt
@@ -88,7 +89,7 @@ Definition validate_ast_type (c : config) (p : PAst) : result' unit :=
 Definition needs_typed (c : config) : bool :=
   match c.(backend_opts) with
   | Rust _ | Elm _ => true
-  | C _ | Wasm _ | OCaml _ | CakeML _ | Eval _ => false
+  | C _ | Wasm _ | LLVM _ | OCaml _ | CakeML _ | Eval _ => false
   | AST c =>
     match c.(ast_type) with
     | LambdaBoxTyped => true
@@ -141,6 +142,7 @@ Inductive extracted_program :=
 | ElmProgram : string -> extracted_program
 | CProgram : (CertiRocq.Codegen.toplevel.Cprogram * list string) -> extracted_program
 | WasmProgram : string -> extracted_program
+| LLVMProgram : string -> extracted_program
 | OCamlProgram : (list string * string) -> extracted_program
 | CakeMLProgram : (list string * string) -> extracted_program
 | EvalProgram : string -> extracted_program
@@ -213,6 +215,16 @@ Definition run_backend (c : config) (f : string) (p : PAst) : extraction_result 
       f
       p';;
     Ok (WasmProgram res)
+
+  | LLVM opts =>
+    p' <- PAst_to_EAst p;;
+    res <- LLVMBackend.extract_llvm
+      const_remaps
+      custom_attr
+      opts
+      f
+      p';;
+    Ok (LLVMProgram res)
 
   | Eval opts =>
     p' <- PAst_to_EAst p;;
