@@ -91,7 +91,7 @@ jobs:
           npm install -g elm-test@0.19.1-revision9
 
       - name: Set up GHC
-        uses: haskell-actions/setup@v2
+        uses: haskell-actions/setup@v2.11.0
         id: haskell-setup
         with:
           ghc-version: ${{env.GHC_VERSION}}
