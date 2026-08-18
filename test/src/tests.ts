@@ -9,7 +9,7 @@ export var test_configurations: TestConfiguration[] = [
     [Lang.Wasm, "", ""],
     // [Lang.Rust, "", "--attr=\"#[derive(Debug, Clone, Serialize)]\" --top-preamble=\"use lexpr::{to_string}; use serde_derive::{Serialize}; use serde_lexpr::{to_value};\n\""],
     // [Lang.Elm, "", "--top-preamble=\"import Test\nimport Html\nimport Expect exposing (Expectation)\""],
-    // [Lang.FSharp, "", ""],
+    [Lang.FSharp, "", ""],
     [Lang.CakeML, "", ""]
 ];
 

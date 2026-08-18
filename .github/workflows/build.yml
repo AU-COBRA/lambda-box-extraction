@@ -143,6 +143,11 @@ jobs:
           lint: false
           lake-package-directory: "test/lean/"
 
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
       - name: Test extraction
         run: |
           echo "::group::Running tests"
