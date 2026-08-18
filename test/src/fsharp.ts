@@ -1,12 +1,21 @@
 import { execSync } from "child_process";
 import { ExecResult, ProgramType, SimpleType, TestCase } from "./types";
 import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { exit } from "process";
+import { print_line } from "./utils";
 import path from "path";
 
 const template_dir = path.join(process.cwd(), "src/fsharp/");
 
 // Keep the SDK quiet and reproducible across machines.
 const dotnet_env = { ...process.env, DOTNET_CLI_TELEMETRY_OPTOUT: "1", DOTNET_NOLOGO: "1" };
+
+// Collect whatever a failed execSync captured, preferring stderr.
+function exec_output(e): string {
+  const stderr = e.stderr ? e.stderr.toString() : "";
+  const stdout = e.stdout ? e.stdout.toString() : "";
+  return stderr || stdout;
+}
 
 // Set up a fresh .NET project in tmpdir that the F# test driver can
 // build & run generated programs against.  Mirrors prepare_cargo /
@@ -21,12 +30,30 @@ export function prepare_fsharp_project(tmpdir: string, timeout: number): string 
 
   // Warm build: performs the one (offline, library-packs-backed) restore
   // and compiles TestPrinters + stub Main so per-test builds are incremental.
-  execSync("dotnet build -c Release --nologo -v:q", {
-    stdio: "pipe",
-    timeout: timeout,
-    cwd: projectdir,
-    env: dotnet_env,
-  });
+  // A cold SDK start (first-run setup + restore) is far slower than a single
+  // test, so this gets its own budget instead of the per-test timeout.
+  const warm_timeout = Math.max(timeout * 4, 120000);
+
+  try {
+    execSync("dotnet build -c Release --nologo -v:q", {
+      stdio: "pipe",
+      timeout: warm_timeout,
+      cwd: projectdir,
+      env: dotnet_env,
+    });
+  } catch (e) {
+    // Like compile_types for the OCaml backend, a broken prepare phase is
+    // fatal for the whole suite: report it readably instead of letting a
+    // raw exception unwind out of main().
+    print_line("error: could not prepare the F# test project");
+    if (e.signal == "SIGTERM") {
+      print_line(`dotnet build timed out after ${warm_timeout} ms`);
+    } else {
+      print_line(`dotnet build failed with code ${e.status}`);
+    }
+    print_line(exec_output(e));
+    exit(1);
+  }
 
   return projectdir;
 }
@@ -60,11 +87,12 @@ function pp_call(type: ProgramType): string | undefined {
 // Append a main INSIDE `module Generated` (a top-level module runs to
 // EOF).  Nullary constants are emitted as Lazy<obj> and must be forced
 // inside the big-stack thread, never at module init on the 1 MiB stack.
-function append_main(original: string, test: TestCase): string {
+// `printer` is the pp_call for the test's output type, or undefined when
+// there is none — then the value is only evaluated, never printed.
+function append_main(original: string, test: TestCase, printer: string | undefined): string {
   const isLazy = new RegExp(`let(?:\\s+rec)?\\s+${test.main}\\s*:\\s*Lazy<obj>`).test(original);
   const target = isLazy ? `${test.main}.Force()` : `box ${test.main}`;
 
-  const printer = pp_call(test.output_type);
   const body = printer === undefined
     ? `ignore (${target})`
     : `System.Console.Out.WriteLine(${printer} (${target}))`;
@@ -82,14 +110,20 @@ let main (_argv: string[]) =
 }
 
 export function run_fsharp(file: string, projectdir: string, test: TestCase, timeout: number): ExecResult {
+  // When there is no printer for the output type the spliced main prints
+  // nothing, so the test is run-only: succeeding means the program built
+  // and exited cleanly.
+  const printer = pp_call(test.output_type);
+
+  const start_main = Date.now();
+
+  // Build a NATIVE executable; the warm build already restored, so the
+  // per-test build is incremental.
   try {
     // The generated program becomes the project's Main.fs, with the
     // entry point appended to it.
-    writeFileSync(path.join(projectdir, "Main.fs"), append_main(readFileSync(file, "utf8"), test));
+    writeFileSync(path.join(projectdir, "Main.fs"), append_main(readFileSync(file, "utf8"), test, printer));
 
-    // Build and run a NATIVE executable; the warm build already
-    // restored, so the per-test build is incremental.
-    const start_main = Date.now();
     execSync("dotnet build -c Release --no-restore --nologo -v:q", {
       stdio: "pipe",
       timeout: timeout,
@@ -97,32 +131,47 @@ export function run_fsharp(file: string, projectdir: string, test: TestCase, tim
       encoding: "utf8",
       env: dotnet_env,
     });
-    const res = execSync("dotnet bin/Release/net10.0/testexe.dll", {
+  } catch (e) {
+    if (e.signal == "SIGTERM") {
+      return { type: "error", reason: "timeout" };
+    }
+
+    return { type: "error", reason: "compile error", compiler: "dotnet", code: e.status, error: exec_output(e) };
+  }
+
+  // Run the built executable.  A non-zero exit here is a failure of the
+  // program, not of the compiler.
+  var res: string;
+  try {
+    res = execSync("dotnet bin/Release/net10.0/testexe.dll", {
       stdio: "pipe",
       timeout: timeout,
       cwd: projectdir,
       encoding: "utf8",
       env: dotnet_env,
     }).trim();
-    const stop_main = Date.now();
-    const time_main = stop_main - start_main;
-
-    if (test.expected_output === undefined || test.output_type === SimpleType.Other) {
-      return { type: "success", time: time_main };
-    }
-
-    if (res !== test.expected_output[0]) {
-      return { type: "error", reason: "incorrect result", actual: res, expected: test.expected_output[0] };
-    }
-
-    return { type: "success", time: time_main };
   } catch (e) {
     if (e.signal == "SIGTERM") {
       return { type: "error", reason: "timeout" };
     }
 
-    const stderr = e.stderr ? e.stderr.toString("utf8") : "";
-    const stdout = e.stdout ? e.stdout.toString("utf8") : "";
-    return { type: "error", reason: "compile error", compiler: "dotnet", code: e.status, error: stderr || stdout };
+    return { type: "error", reason: "runtime error", error: exec_output(e) || `${e}` };
   }
+
+  const stop_main = Date.now();
+  const time_main = stop_main - start_main;
+
+  // Return success if there is no expected output to compare against, if the
+  // program returns a type that we don't know how to print, or if we have no
+  // printer for it (nothing was written to stdout in that case).
+  if (test.expected_output === undefined || test.output_type === SimpleType.Other || printer === undefined) {
+    return { type: "success", time: time_main };
+  }
+
+  // Compare output against the expected output
+  if (res !== test.expected_output[0]) {
+    return { type: "error", reason: "incorrect result", actual: res, expected: test.expected_output[0] };
+  }
+
+  return { type: "success", time: time_main };
 }
