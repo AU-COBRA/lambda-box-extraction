@@ -168,7 +168,7 @@ Terms in `Typed` ASTs use exactly the same `EAst.term` grammar as the untyped ca
 
 The configuration file is a single S-expression of type `config` (defined in [Config.v](/theories/Config.v)). The CLI also accepts additional *attribute* files of type `attributes_config` via `--attributes`; their `inlinings_opt`, `const_remappings_opt`, `ind_remappings_opt`, `cstr_reorders_opt` and `custom_attributes_opt` lists are concatenated onto the corresponding fields of the main config by `merge_attributes_config`.
 
-When the configuration is supplied as an S-expression file it is parsed at the `config'` ("optional") layer defined in [ConfigUtils.v](/theories/ConfigUtils.v), where every defaultable field is wrapped in `option`, and then materialised via `mk_config`. All omitted fields are filled from the backend-specific defaults (`default_rust_config`, `default_elm_config`, `default_c_config`, `default_wasm_config`, `default_ocaml_config`, `default_cakeml_config`, `default_eval_config`, `default_ast_config`). Wherever a field below is "optional" this is the mechanism: send `None` to take the default, or `(Some <value>)` to override.
+When the configuration is supplied as an S-expression file it is parsed at the `config'` ("optional") layer defined in [ConfigUtils.v](/theories/ConfigUtils.v), where every defaultable field is wrapped in `option`, and then materialised via `mk_config`. All omitted fields are filled from the backend-specific defaults (`default_rust_config`, `default_elm_config`, `default_c_config`, `default_wasm_config`, `default_ocaml_config`, `default_cakeml_config`, `default_fsharp_config`, `default_eval_config`, `default_ast_config`). Wherever a field below is "optional" this is the mechanism: send `None` to take the default, or `(Some <value>)` to override.
 
 ### General configuration
 
@@ -266,6 +266,7 @@ The `attributes_config` payload accepted via `--attributes` is the 5-element sub
 (Wasm   <wasm_config>)
 (OCaml  <ocaml_config>)
 (CakeML <cakeml_config>)
+(FSharp <fsharp_config>)
 (Eval   <eval_config>)
 (AST    <ast_config>)
 ```
@@ -327,6 +328,15 @@ and is forwarded to the Malfunction printer. Default: `Standalone`.
 
 #### CakeML (`cakeml_config`)
 `cakeml_config` is `unit`, serialized as the empty list `()`. CakeML extraction has no user-tunable fields at present.
+
+#### F# (`fsharp_config`)
+```
+(fsharp_config
+  <fsharp_namespace>          ; "Generated"
+  <fsharp_print_full_names>)  ; true
+```
+* `fsharp_namespace` is the F# `module` name the generated `.fs` file opens with.
+* `fsharp_print_full_names` toggles fully-qualified printing of MetaRocq names.
 
 #### Eval (`eval_config`)
 ```

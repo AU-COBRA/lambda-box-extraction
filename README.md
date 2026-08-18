@@ -41,6 +41,7 @@ Valid values for `TARGETLANGUAGE` are:
 * `cakeml`
 * `rust`
 * `elm`
+* `fsharp`
 
 For detailed usage on all commands and flags see [cmds.md](/doc/cmds.md) or use `peregrine --help`.
 
@@ -64,5 +65,6 @@ Peregrine supports extraction to the following programming languages
 * OCaml
 * CakeML
 * Elm
+* F#
 
 For more information on the backends see [backends.md](/doc/backends.md).

@@ -13,6 +13,7 @@ The table below summarises supported the backends
 | CakeML       | untyped | ✓ | ✓ | Serialized AST             | ✗ | GC |
 | Rust         | typed   | ✗ | ✗ | Source language            | ✓ | Bump allocator, no GC |
 | Elm          | typed   | ✗ | ✗ | Source language            | ✓ | - |
+| F#           | untyped | ✗ | ✗ | F# source                  | ✓ | .NET GC |
 | AST (debug)  | either  | ✓ | ✓ | Serialized AST             | ✗ | - |
 | Eval (debug) | either  | ✓ | ✗ | -                          | ✗ | -  |
 
@@ -64,6 +65,16 @@ The backend is located in [`peregrine-project/rocq-typed-extraction`](https://gi
 Output
 * A single file; written to `<file>.elm` by the CLI.
 * The result has no external dependencies and is compiled with the [Elm compiler](https://guide.elm-lang.org/install/elm).
+
+## F#
+
+F# backend extracting to surface level F# code. The backend requires untyped AST. The printer is unverified.
+
+Output
+* A single, self-contained `.fs` file, including an inlined runtime helper, so it has no external dependencies. Note the emitted file cannot run under `dotnet fsi` (scripts reject top-level `module` declarations); compile it inside a .NET project.
+* Every value is printed as `obj`; source inductives become `[<RequireQualifiedAccess>]` discriminated unions, and nullary constants are wrapped in `Lazy<obj>` so they are not forced at module-init time.
+* Compile and run with [`dotnet`](https://dotnet.microsoft.com/) in `Release` mode — `Debug` builds and `dotnet fsi` disable .NET tail calls. Deep non-tail recursion should run on a large-stack thread (the test harness uses a 512 MiB stack).
+* No support for `tPrim`/primitives, and no support for remapping, like the Lean backend.
 
 ## Debug backends
 
