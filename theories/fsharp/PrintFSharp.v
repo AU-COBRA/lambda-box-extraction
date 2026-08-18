@@ -158,6 +158,33 @@ Definition fs_cap (s : string) : string :=
     else "C" ++ s
   end.
 
+Definition byte_is_digit (b : byte) : bool :=
+  match b with
+  | x30 | x31 | x32 | x33 | x34 | x35 | x36 | x37 | x38 | x39 => true
+  | _ => false
+  end.
+
+(* The [default_module] prefix comes from the input *file name*, which
+   the pipeline's name sanitizer never sees (it only rewrites names
+   inside the AST).  Rewrite anything outside [A-Za-z0-9_] to [_] and
+   guard against a leading digit, so a file called [over-under.ast]
+   still yields valid identifiers. *)
+Fixpoint sanitize_module_chars (s : string) : string :=
+  match s with
+  | String.EmptyString => String.EmptyString
+  | String.String b rest =>
+    let keep := orb (orb (byte_is_lower b) (byte_is_upper b))
+                    (orb (byte_is_digit b) (Byte.eqb b x5f)) in
+    String.String (if keep then b else x5f) (sanitize_module_chars rest)
+  end.
+
+Definition fs_module_name (s : string) : string :=
+  let s' := sanitize_module_chars s in
+  match s' with
+  | String.EmptyString => String.EmptyString (* empty means "no prefix" in [full_name] *)
+  | String.String b _ => if byte_is_digit b then "M" ++ s' else s'
+  end.
+
 (* Suffix inductive type names with [_] so we never collide with F#
    keywords or built-in types (e.g. [bool], [option], [unit]).  Type
    names keep their source casing — F# accepts lowercase type names —
@@ -197,31 +224,57 @@ Definition lookup_oib (env : ind_env) (ind : inductive) : option EAst.one_induct
   | None => None
   end.
 
+(* Constructor display names of one inductive, with positional
+   disambiguation: [fs_cap] can identify source names differing only in
+   leading-letter case ([foo]/[Foo] both map to [Foo_]); a later
+   duplicate gets its constructor index appended so the union still
+   compiles.  Declaration and use sites both go through this list, so
+   they always agree. *)
+Definition ctor_display_names (oib : EAst.one_inductive_body) : list string :=
+  let base := List.map (fun cb => ctor_name (cb.(EAst.cstr_name))) oib.(EAst.ind_ctors) in
+  (fix dedup (seen : list string) (i : nat) (l : list string) : list string :=
+     match l with
+     | [] => []
+     | n :: rest =>
+       let n' := if List.existsb (String.eqb n) seen then n ++ string_of_nat i else n in
+       n' :: dedup (n :: seen) (S i) rest
+     end) [] 0 base.
+
 Definition lookup_ctor_name (env : ind_env) (ind : inductive) (n : nat) : string :=
   match lookup_oib env ind with
   | Some oib =>
-    match nth_error oib.(EAst.ind_ctors) n with
-    | Some cb => ctor_name (cb.(EAst.cstr_name))
+    match nth_error (ctor_display_names oib) n with
+    | Some s => s
     | None => "MissingCtor_" ++ string_of_nat n
     end
   | None => "MissingInd_" ++ string_of_nat n
   end.
 
 (* Inductive type names get the same inner-module qualification as
-   definitions: e.g. FMap [M.t] and FSet [S.t] would otherwise both
-   print as [t_]. *)
-Definition lookup_ind_name (env : ind_env) (ind : inductive) : string :=
+   definitions (e.g. FMap [M.t] and FSet [S.t] would otherwise both
+   print as [t_]), and — like function names — a file-root
+   disambiguator when the qualified name still collides across files
+   (e.g. Corelib's [list] next to a program's own [list]).
+   [ind_dups] is computed over the whole program by [print_program]. *)
+Definition ind_base (mp : modpath) (nm : ident) : string := qualify_mp mp nm.
+
+Definition ind_display_name (ind_dups : list string) (mp : modpath) (nm : ident) : string :=
+  let b := ind_base mp nm in
+  ind_name (if List.existsb (String.eqb b) ind_dups
+            then concat_with "_" (mp_root_file mp ++ mp_quals mp ++ [nm])
+            else b).
+
+Definition lookup_ind_name (ind_dups : list string) (env : ind_env) (ind : inductive) : string :=
   match lookup_oib env ind with
   | Some oib =>
-    ind_name (qualify_mp (fst ind.(inductive_mind)) (oib.(EAst.ind_name)))
+    ind_display_name ind_dups (fst ind.(inductive_mind)) (oib.(EAst.ind_name))
   | None => "MissingInd"
   end.
 
 (* ----- Inductive declaration printer (context-free) --------------- *)
 
-Definition print_ctor (cb : EAst.constructor_body) : string :=
-  let nargs := cb.(EAst.cstr_nargs) in
-  "| " ++ ctor_name (cb.(EAst.cstr_name))
+Definition print_ctor (nm : string) (nargs : nat) : string :=
+  "| " ++ nm
     ++ (match nargs with O => "" | _ => " of " ++ obj_tuple nargs end).
 
 (* One union per one_inductive_body, on a single line.
@@ -230,20 +283,25 @@ Definition print_ctor (cb : EAst.constructor_body) : string :=
    inductive with no constructors is elided: F# forbids empty unions,
    and such a type can never be referenced by a well-formed program
    (its only use sites are empty matches, printed without a cast). *)
-Definition print_one_inductive (mp : modpath) (oib : EAst.one_inductive_body) : string :=
-  let nm := ind_name (qualify_mp mp (oib.(EAst.ind_name))) in
+Definition print_one_inductive (ind_dups : list string) (mp : modpath)
+                               (oib : EAst.one_inductive_body) : string :=
+  let nm := ind_display_name ind_dups mp (oib.(EAst.ind_name)) in
   match oib.(EAst.ind_ctors) with
   | [] =>
     "// empty inductive " ++ nm ++ " elided (F# forbids empty unions; never referenced)"
   | ctors =>
     "[<RequireQualifiedAccess>]" ++ nl
-      ++ "type " ++ nm ++ " = " ++ concat_with " " (List.map print_ctor ctors)
+      ++ "type " ++ nm ++ " = "
+      ++ concat_with " "
+           (List.map (fun '(cn, cb) => print_ctor cn (cb.(EAst.cstr_nargs)))
+              (List.combine (ctor_display_names oib) ctors))
   end.
 
 (* Mutual inductives need no [and]-chaining: every field is [obj], so
    the printed unions never refer to each other. *)
-Definition print_inductive (kn : kername) (mib : EAst.mutual_inductive_body) : string :=
-  concat_with nl (List.map (print_one_inductive (fst kn)) mib.(EAst.ind_bodies)).
+Definition print_inductive (ind_dups : list string) (kn : kername)
+                           (mib : EAst.mutual_inductive_body) : string :=
+  concat_with nl (List.map (print_one_inductive ind_dups (fst kn)) mib.(EAst.ind_bodies)).
 
 (* ----- Arity bookkeeping ------------------------------------------ *)
 
@@ -341,7 +399,8 @@ Section Printer.
      of base names that collide in this program (see [full_name]);
      [arities] maps every top-level function to its parameter count. *)
   Context (dups : list string) (full_names : bool) (default_module : string)
-          (env : ind_env) (thunks : list kername) (arities : list (kername * nat)).
+          (env : ind_env) (thunks : list kername) (arities : list (kername * nat))
+          (ind_dups : list string).
 
   (* Nullary top-level constants are emitted as [Lazy<obj>] (see
      [print_ffun]); references to them must force via [.Force()]. *)
@@ -381,7 +440,7 @@ Section Printer.
         end
     | FCtor ind idx args =>
       let cn := lookup_ctor_name env ind idx in
-      let ind_n := lookup_ind_name env ind in
+      let ind_n := lookup_ind_name ind_dups env ind in
       let fix print_args (ts : list fterm) : list string :=
         match ts with
         | [] => []
@@ -399,7 +458,7 @@ Section Printer.
       let ind := p.(proj_ind) in
       let arg := p.(proj_arg) in
       let cn := lookup_ctor_name env ind 0 in
-      let ind_n := lookup_ind_name env ind in
+      let ind_n := lookup_ind_name ind_dups env ind in
       let nargs :=
         match lookup_oib env ind with
         | Some oib =>
@@ -439,7 +498,7 @@ Section Printer.
           ++ print_fterm_k (remove_locals [id] locals) body [] ++ ")")
         pending
     | FCase discr ind brs =>
-      let ind_n := lookup_ind_name env ind in
+      let ind_n := lookup_ind_name ind_dups env ind in
       let print_br (i : nat) (br : list ident * fterm) : string :=
         let '(ids, body) := br in
         let cn := lookup_ctor_name env ind i in
@@ -509,8 +568,9 @@ Section Printer.
       (* Stand-in [obj] for computationally irrelevant terms (tBox
          replacements).  Must be a benign value — erased argument slots
          are materialized eagerly under call-by-value, so a [failwith]
-         here would abort correct programs. *)
-      wrap_applies "(box ())" pending
+         here would abort correct programs.  [PG.boxv] also survives
+         head position ([box x ~> box]), unlike a bare [box ()]/null. *)
+      wrap_applies "PG.boxv" pending
     end.
 
   (* Nullary standalone constants become memoized [Lazy<obj>]: a plain
@@ -540,7 +600,7 @@ Section Printer.
 
   Definition print_decl (kn : kername) (d : fdecl) : string :=
     match d with
-    | FInductive mib => print_inductive kn mib
+    | FInductive mib => print_inductive ind_dups kn mib
     | FDef f => print_ffun true (pick_fun_name dups full_names default_module kn) f
     | FRecGroup fs =>
       (* Module-level [and] continues the leader's [let rec] at column 0. *)
@@ -571,6 +631,11 @@ Definition preamble (ns : string) : string :=
     ++ "#nowarn ""64""" ++ nl
     ++ "module PG =" ++ nl
     ++ "  let inline apply (f: obj) (x: obj) : obj = (f :?> (obj -> obj)) x" ++ nl
+    ++ "  // The erased-term placeholder: a box that absorbs any application" ++ nl
+    ++ "  // (the lambda-box rule is [box x ~> box]), so erased values are" ++ nl
+    ++ "  // safe even in head position." ++ nl
+    ++ "  let rec boxfn (_: obj) : obj = box boxfn" ++ nl
+    ++ "  let boxv : obj = box boxfn" ++ nl
     ++ nl.
 
 (* Knames of nullary standalone [FDef]s — the constants emitted as
@@ -601,13 +666,29 @@ Definition dup_base_names (decls : list (kername * fdecl)) : list string :=
   List.filter (fun n =>
     Nat.ltb 1 (List.length (List.filter (String.eqb n) names))) names.
 
+(* Qualified inductive names occurring more than once — these get the
+   file-root disambiguator in [ind_display_name]. *)
+Definition dup_ind_names (decls : list (kername * fdecl)) : list string :=
+  let names :=
+    List.concat (List.map (fun (x : kername * fdecl) =>
+      let '(kn, d) := x in
+      match d with
+      | FInductive mib =>
+        List.map (fun oib => ind_base (fst kn) (oib.(EAst.ind_name))) mib.(EAst.ind_bodies)
+      | _ => []
+      end) decls) in
+  List.filter (fun n =>
+    Nat.ltb 1 (List.length (List.filter (String.eqb n) names))) names.
+
 Definition print_program (full_names : bool) (default_module : string) (ns : string) (p : fprogram) : string :=
+  let default_module := fs_module_name default_module in
   let env := build_ind_env p.(fdecls) in
   let thunks := thunk_knames p.(fdecls) in
   let arities := fun_arities p.(fdecls) in
   let dups := dup_base_names p.(fdecls) in
+  let ind_dups := dup_ind_names p.(fdecls) in
   preamble ns
     ++ concat_with (nl ++ nl)
          (List.map (fun '(kn, d) =>
-            print_decl dups full_names default_module env thunks arities kn d) p.(fdecls))
+            print_decl dups full_names default_module env thunks arities ind_dups kn d) p.(fdecls))
     ++ nl.
