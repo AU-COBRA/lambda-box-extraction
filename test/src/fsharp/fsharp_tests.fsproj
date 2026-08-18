@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <RollForward>LatestMajor</RollForward>
+    <AssemblyName>testexe</AssemblyName>
+    <Tailcalls>true</Tailcalls>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <DebugType>none</DebugType>
+    <NoWarn>$(NoWarn);FS0020;FS0025;FS0026;FS0040;FS0049;FS0058;FS0064</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="TestPrinters.fs" />
+    <Compile Include="Main.fs" />
+  </ItemGroup>
+</Project>

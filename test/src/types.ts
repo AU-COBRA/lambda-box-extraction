@@ -35,7 +35,8 @@ export enum Lang {
   Wasm = "WebAssembly",
   Rust = "Rust",
   Elm = "Elm",
-  CakeML = "CakeML"
+  CakeML = "CakeML",
+  FSharp = "FSharp"
 }
 
 export type TestCase = {

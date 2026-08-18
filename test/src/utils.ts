@@ -25,6 +25,8 @@ export function lang_to_peregrine_arg(lang: Lang): string {
       return "elm";
     case Lang.CakeML:
       return "cakeml";
+    case Lang.FSharp:
+      return "fsharp";
   }
 }
 
@@ -43,5 +45,7 @@ export function lang_to_ext(lang: Lang): string {
       return ".elm";
     case Lang.CakeML:
       return ".cml";
+    case Lang.FSharp:
+      return ".fs";
   }
 }

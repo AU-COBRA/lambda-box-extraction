@@ -10,6 +10,7 @@ import { compile_ocaml, compile_types } from "./ocaml";
 import { compile_cakeml, get_cake } from "./cakeml";
 import { compile_rust, prepare_cargo, run_rust } from "./rust";
 import { prepare_elm_project, run_elm } from "./elm";
+import { prepare_fsharp_project, run_fsharp } from "./fsharp";
 import { test_configurations, tests } from "./tests";
 
 
@@ -275,6 +276,27 @@ async function run_tests(lang: Lang, n: string, opts: string, tests: TestCase[])
 
         // Report result
         print_result(res, test.tsrc);
+      }
+      break;
+    case Lang.FSharp:
+      var fsharpdir = prepare_fsharp_project(tmpdir, compile_timeout);
+
+      for (var test of tests) {
+        if (test.src === undefined) continue;
+        process.stdout.write(`  ${test.src}: `);
+
+        // Compile peregrine
+        const f_fs = compile_box(test.src, fsharpdir, Lang.FSharp, opts);
+        if (typeof f_fs !== "string") {
+          print_result(f_fs, test.src);
+          continue;
+        }
+
+        // Run F# (compiles + runs in one shot)
+        const res = run_fsharp(f_fs, fsharpdir, test, exec_timeout);
+
+        // Report result
+        print_result(res, test.src);
       }
       break;
 

@@ -8,6 +8,7 @@ The test suite depends on the following:
 * [elm compiler](https://elm-lang.org/)
 * elm-test (can be installed with npm)
 * gcc
+* [.NET SDK](https://dotnet.microsoft.com/) 10 or later (`dotnet`)
 
 
 ## Agda frontend tests
