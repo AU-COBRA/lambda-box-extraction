@@ -54,6 +54,13 @@ ocamlConfigConv :: OCamlConfig -> ConfigUtils.Coq_ocaml_config'
 ocamlConfigConv OCamlConfig {..} =
   fmap programTypeConv programType
 
+-- FSharp backend configuration
+fsharpConfigConv :: FSharpConfig -> ConfigUtils.Coq_fsharp_config'
+fsharpConfigConv FSharpConfig {..} =
+  ConfigUtils.Build_fsharp_config'
+    (fmap stringConv fsharpNamespace)
+    fsharpPrintFullNames
+
 -- CakeML backend configuration
 cakemlConfigConv :: CakeMLConfig -> ConfigUtils.Coq_cakeml_config'
 cakemlConfigConv t = t
@@ -87,6 +94,7 @@ backendConfigConv (C c) = ConfigUtils.C' $ certirocqConfigConv c
 backendConfigConv (Wasm c) = ConfigUtils.Wasm' $ certirocqConfigConv c
 backendConfigConv (OCaml c) = ConfigUtils.OCaml' $ ocamlConfigConv c
 backendConfigConv (CakeML c) = ConfigUtils.CakeML' $ cakemlConfigConv c
+backendConfigConv (FSharp c) = ConfigUtils.FSharp' $ fsharpConfigConv c
 backendConfigConv (Eval c) = ConfigUtils.Eval' $ evalConfigConv c
 backendConfigConv (AST c) = ConfigUtils.AST' $ astConfigConv c
 

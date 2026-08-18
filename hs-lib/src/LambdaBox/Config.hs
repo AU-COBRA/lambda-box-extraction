@@ -49,6 +49,12 @@ data OCamlConfig = OCamlConfig
   { programType :: Maybe ProgramType
   }
 
+-- FSharp backend configuration
+data FSharpConfig = FSharpConfig
+  { fsharpNamespace      :: Maybe String,
+    fsharpPrintFullNames :: Maybe Bool
+  }
+
 -- CakeML backend configuration
 type CakeMLConfig = ()
 
@@ -82,6 +88,7 @@ data BackendConfig
   | Wasm CertiRocqConfig
   | OCaml OCamlConfig
   | CakeML CakeMLConfig
+  | FSharp FSharpConfig
   | Eval EvalConfig
   | AST ASTConfig
 
