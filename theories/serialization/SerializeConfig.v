@@ -113,6 +113,20 @@ Instance Serialize_cakeml_config' : Serialize cakeml_config' :=
   fun o =>
     @to_sexp _ Serialize_unit o.
 
+Instance Serialize_fsharp_config : Serialize fsharp_config :=
+  fun o =>
+    [Atom "fsharp_config";
+     to_sexp (fsharp_namespace o);
+     to_sexp (fsharp_print_full_names o)
+    ]%sexp.
+
+Instance Serialize_fsharp_config' : Serialize fsharp_config' :=
+  fun o =>
+    [Atom "fsharp_config";
+     to_sexp (fsharp_namespace' o);
+     to_sexp (fsharp_print_full_names' o)
+    ]%sexp.
+
 Instance Serialize_eval_config : Serialize eval_config :=
   fun o =>
     [Atom "eval_config";
@@ -172,6 +186,7 @@ Instance Serialize_backend_config : Serialize backend_config :=
     | Wasm o => [Atom "Wasm"; to_sexp o ]
     | OCaml o => [Atom "OCaml"; to_sexp o ]
     | CakeML o => [Atom "CakeML"; to_sexp o ]
+    | FSharp o => [Atom "FSharp"; to_sexp o ]
     | Eval o => [Atom "Eval"; to_sexp o ]
     | AST o => [Atom "AST"; to_sexp o ]
     end%sexp.
@@ -185,6 +200,7 @@ Instance Serialize_backend_config' : Serialize backend_config' :=
     | Wasm' o => [Atom "Wasm"; to_sexp o ]
     | OCaml' o => [Atom "OCaml"; to_sexp o ]
     | CakeML' o => [Atom "CakeML"; to_sexp o ]
+    | FSharp' o => [Atom "FSharp"; to_sexp o ]
     | Eval' o => [Atom "Eval"; to_sexp o ]
     | AST' o => [Atom "AST"; to_sexp o ]
     end%sexp.
@@ -350,6 +366,12 @@ Definition string_of_cakeml_config (x : cakeml_config) : string :=
 
 Definition string_of_cakeml_config' (x : cakeml_config') : string :=
   @to_string cakeml_config' Serialize_cakeml_config' x.
+
+Definition string_of_fsharp_config (x : fsharp_config) : string :=
+  @to_string fsharp_config Serialize_fsharp_config x.
+
+Definition string_of_fsharp_config' (x : fsharp_config') : string :=
+  @to_string fsharp_config' Serialize_fsharp_config' x.
 
 Definition string_of_eval_config (x : eval_config) : string :=
   @to_string eval_config Serialize_eval_config x.

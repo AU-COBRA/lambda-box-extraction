@@ -385,6 +385,10 @@ Definition cakeml_sanitizer (s : utf8_string) : string := ocaml_sanitizer s.
 Definition elm_sanitizer (s : utf8_string) : string := ocaml_sanitizer s.
 Definition c_sanitizer (s : utf8_string) : string := ocaml_sanitizer s.
 Definition wasm_sanitizer (s : utf8_string) : string := ocaml_sanitizer s.
+(* F# identifiers admit a richer character set than OCaml's, so the
+   OCaml sanitizer's output is a strict subset of the legal F#
+   identifiers.  The printer separately capitalizes union cases. *)
+Definition fsharp_sanitizer (s : utf8_string) : string := ocaml_sanitizer s.
 
 
 Definition rust_delim : utf8_codepoint :=
@@ -502,6 +506,7 @@ Definition get_sanitizer (o : Config.config) : utf8_string -> string :=
   | Config.CakeML _ => cakeml_sanitizer
   | Config.C _ => c_sanitizer
   | Config.Wasm _ => wasm_sanitizer
+  | Config.FSharp _ => fsharp_sanitizer
   (* Name sanitizing not necessary here *)
   | Config.Eval _ => skip_sanitize
   | Config.AST _ => skip_sanitize

@@ -61,6 +61,11 @@ let write_cakeml_res opts f p =
   write_res f (fun f ->
     output_string f (caml_string_of_bytestring (snd p)))
 
+let write_fsharp_res opts f p =
+  let f = get_out_file opts f "fs" in
+  let p = caml_string_of_bytestring p in
+  write_res f (fun f -> output_string f p)
+
 let write_ast_res opts f p =
   let f = get_out_file opts f "ast" in
   let p = caml_string_of_bytestring p in
@@ -92,6 +97,7 @@ let write_program opts f p =
   | Pipeline.CakeMLProgram p -> write_cakeml_res opts f p
   | Pipeline.CProgram p -> write_c_res opts f p
   | Pipeline.WasmProgram p -> write_wasm_res opts f p
+  | Pipeline.FSharpProgram p -> write_fsharp_res opts f p
   | Pipeline.EvalProgram p -> cprint_endline p
   | Pipeline.ASTProgram p -> write_ast_res opts f p
 
@@ -201,6 +207,10 @@ let compile_ocaml opts eopts f_prog =
 
 let compile_cakeml opts eopts f_prog =
   let b_opts = ConfigUtils.CakeML' ConfigUtils.empty_cakeml_config' in
+  compile_backend b_opts opts eopts f_prog
+
+let compile_fsharp opts eopts f_prog =
+  let b_opts = ConfigUtils.FSharp' ConfigUtils.empty_fsharp_config' in
   compile_backend b_opts opts eopts f_prog
 
 let compile_c opts copts eopts f_prog =

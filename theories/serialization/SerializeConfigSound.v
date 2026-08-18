@@ -210,6 +210,38 @@ Proof.
   exact He.
 Qed.
 
+Instance Sound_fsharp_config : SoundClass fsharp_config.
+Proof.
+  unfold SoundClass, Sound.
+  intros l e a He.
+  apply sound_match_con in He.
+  destruct He as [He | He]; elim_Exists He.
+  destruct He as [es [<- He]].
+  sound_field He.
+  apply sound_class in Ea0.
+  apply sound_class in Ea1.
+  unfold to_sexp, Serialize_fsharp_config.
+  cbn.
+  rewrite <- Ea0, <- Ea1.
+  reflexivity.
+Qed.
+
+Instance Sound_fsharp_config' : SoundClass fsharp_config'.
+Proof.
+  unfold SoundClass, Sound.
+  intros l e a He.
+  apply sound_match_con in He.
+  destruct He as [He | He]; elim_Exists He.
+  destruct He as [es [<- He]].
+  sound_field He.
+  apply sound_class in Ea0.
+  apply sound_class in Ea1.
+  unfold to_sexp, Serialize_fsharp_config'.
+  cbn.
+  rewrite <- Ea0, <- Ea1.
+  reflexivity.
+Qed.
+
 Instance Sound_eval_config : SoundClass eval_config.
 Proof.
   unfold SoundClass, Sound.
@@ -341,46 +373,11 @@ Proof.
   unfold SoundClass, Sound.
   intros l e n He.
   apply sound_match_con in He.
-  destruct He as [He | He]; elim_Exists He.
-  - destruct He as [es [<- He]].
-    sound_field He.
-    apply sound_class in Ea1.
-    rewrite <- Ea1.
-    reflexivity.
-  - destruct He as [es [<- He]].
-    sound_field He.
-    apply sound_class in Ea1.
-    rewrite <- Ea1.
-    reflexivity.
-  - destruct He as [es [<- He]].
-    sound_field He.
-    apply sound_class in Ea1.
-    rewrite <- Ea1.
-    reflexivity.
-  - destruct He as [es [<- He]].
-    sound_field He.
-    apply sound_class in Ea1.
-    rewrite <- Ea1.
-    reflexivity.
-  - destruct He as [es [<- He]].
-    sound_field He.
-    apply sound_class in Ea1.
-    rewrite <- Ea1.
-    reflexivity.
-  - destruct He as [es [<- He]].
-    sound_field He.
-    apply sound_class in Ea1.
-    rewrite <- Ea1.
-    reflexivity.
-  - destruct He as [es [<- He]].
-    sound_field He.
-    apply sound_class in Ea1.
-    rewrite <- Ea1.
-    reflexivity.
-  - destruct He as [es [<- He]].
-    sound_field He.
-    apply sound_class in Ea1.
-    rewrite <- Ea1.
+  destruct He as [He | He]; elim_Exists He;
+    destruct He as [es [<- He]];
+    sound_field He;
+    apply sound_class in Ea1;
+    rewrite <- Ea1;
     reflexivity.
 Qed.
 
@@ -389,46 +386,11 @@ Proof.
   unfold SoundClass, Sound.
   intros l e n He.
   apply sound_match_con in He.
-  destruct He as [He | He]; elim_Exists He.
-  - destruct He as [es [<- He]].
-    sound_field He.
-    apply sound_class in Ea1.
-    rewrite <- Ea1.
-    reflexivity.
-  - destruct He as [es [<- He]].
-    sound_field He.
-    apply sound_class in Ea1.
-    rewrite <- Ea1.
-    reflexivity.
-  - destruct He as [es [<- He]].
-    sound_field He.
-    apply sound_class in Ea1.
-    rewrite <- Ea1.
-    reflexivity.
-  - destruct He as [es [<- He]].
-    sound_field He.
-    apply sound_class in Ea1.
-    rewrite <- Ea1.
-    reflexivity.
-  - destruct He as [es [<- He]].
-    sound_field He.
-    apply sound_class in Ea1.
-    rewrite <- Ea1.
-    reflexivity.
-  - destruct He as [es [<- He]].
-    sound_field He.
-    apply sound_class in Ea1.
-    rewrite <- Ea1.
-    reflexivity.
-  - destruct He as [es [<- He]].
-    sound_field He.
-    apply sound_class in Ea1.
-    rewrite <- Ea1.
-    reflexivity.
-  - destruct He as [es [<- He]].
-    sound_field He.
-    apply sound_class in Ea1.
-    rewrite <- Ea1.
+  destruct He as [He | He]; elim_Exists He;
+    destruct He as [es [<- He]];
+    sound_field He;
+    apply sound_class in Ea1;
+    rewrite <- Ea1;
     reflexivity.
 Qed.
 

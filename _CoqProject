@@ -17,6 +17,10 @@ theories/erasure/ErasureTyped.v
 theories/erasure/Transforms.v
 theories/erasure/EImplementLazyForce.v
 
+theories/fsharp/FSharpIR.v
+theories/fsharp/FSharpCompile.v
+theories/fsharp/PrintFSharp.v
+
 theories/backends/RustBackend.v
 theories/backends/ElmBackend.v
 theories/backends/OCamlBackend.v
@@ -24,6 +28,7 @@ theories/backends/CakeMLBackend.v
 theories/backends/CBackend.v
 theories/backends/WasmBackend.v
 theories/backends/CertiRocqBackend.v
+theories/backends/FSharpBackend.v
 theories/backends/EvalBackend.v
 theories/backends/ASTBackend.v
 
