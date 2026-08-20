@@ -48,6 +48,13 @@ Section BackendConfig.
     program_type : Malfunction.Serialize.program_type;
   }.
 
+  Record catcrypt_config := {
+    catcrypt_namespace : string;
+    catcrypt_def_name  : string;
+    catcrypt_mask63    : bool;
+    catcrypt_scaffold  : bool;
+  }.
+
   Definition cakeml_config : Type := unit.
 
   Record eval_config := {

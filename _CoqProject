@@ -10,6 +10,10 @@ theories/CheckWf.v
 theories/EvalBox.v
 theories/CoqToLambdaBox.v
 theories/Extraction.v
+theories/catcrypt/CatCryptIR.v
+theories/catcrypt/CatCryptCompile.v
+theories/catcrypt/PrintCatCrypt.v
+theories/backends/CatCryptBackend.v
 theories/Pipeline.v
 
 theories/erasure/Erasure.v
