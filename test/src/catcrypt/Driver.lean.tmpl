@@ -1,0 +1,30 @@
+{{PROGRAM}}
+
+-- Peregrine test driver for the CatCrypt cross-check (layers 3 and 4).
+--
+-- Everything above this line is the .lean file `peregrine catcrypt`
+-- generated for the fixture under test, spliced in verbatim; it must come
+-- first because it carries the `import`. Everything below is appended by
+-- test/src/catcrypt.ts and elaborated with `lake env lean --run` from
+-- inside the CatCrypt checkout, so `NamedSSA`, `build` and `eval` resolve
+-- against the real CatCrypt sources rather than a Peregrine-side stub.
+--
+-- stdout contract (parsed by run_cross_check in test/src/catcrypt.ts):
+--   line 1: BUILD_OK           -- ComBuilder.build accepted the NamedSSA
+--        or BUILD_FAIL         -- build returned none
+--        or ARITY_MISMATCH ... -- p.nInputs disagrees with the fixture
+--   line 2: the decimal NamedSSA.eval result at the fixture's arguments
+--        or EVAL_NONE          -- eval returned none
+
+open CatCrypt.Crypto.SecureCompilation.ComBuilder
+
+def main : IO Unit := do
+  let p : NamedSSA := {{NS}}.{{DEF}}
+  if p.nInputs != {{NINPUTS}} then
+    IO.println s!"ARITY_MISMATCH p.nInputs = {p.nInputs}, fixture declares {{NINPUTS}}"
+    IO.println "EVAL_SKIPPED"
+    return
+  IO.println (if (build p).isSome then "BUILD_OK" else "BUILD_FAIL")
+  match p.eval [{{ARGS}}] with
+  | some v => IO.println (toString v.toNat)
+  | none => IO.println "EVAL_NONE"

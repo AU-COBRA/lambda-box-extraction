@@ -6,3 +6,7 @@ theories/Map.v
 theories/Mutual.v
 theories/Nat.v
 theories/OddEven.v
+theories/CatCryptAdd.v
+theories/CatCryptConst.v
+theories/CatCryptShare.v
+theories/CatCryptShift.v

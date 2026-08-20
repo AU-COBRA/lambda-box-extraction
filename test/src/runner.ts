@@ -10,7 +10,8 @@ import { compile_ocaml, compile_types } from "./ocaml";
 import { compile_cakeml, get_cake } from "./cakeml";
 import { compile_rust, prepare_cargo, run_rust } from "./rust";
 import { prepare_elm_project, run_elm } from "./elm";
-import { test_configurations, tests } from "./tests";
+import { run_catcrypt } from "./catcrypt";
+import { catcrypt_reject_tests, catcrypt_tests, test_configurations, tests } from "./tests";
 
 
 // Timeout used when executing the compiled code
@@ -278,6 +279,64 @@ async function run_tests(lang: Lang, n: string, opts: string, tests: TestCase[])
       }
       break;
 
+    case Lang.CatCrypt: {
+      const catcryptdir = path.join(tmpdir, "catcrypt/");
+      if (!existsSync(catcryptdir)) mkdirSync(catcryptdir, { recursive: true });
+      const peregrineCmd = get_exec(use_local_binary);
+
+      // catcrypt_tests / catcrypt_reject_tests are NOT part of the
+      // `tests` array (they use CatCryptTestCase, not TestCase — see
+      // tests.ts), so route them directly here rather than through the
+      // `tests` parameter this switch normally iterates.
+      for (var ctest of catcrypt_tests) {
+        process.stdout.write(`  ${ctest.src}: `);
+
+        let copts = `--def-name ${ctest.def}`;
+        if (ctest.namespace !== undefined) copts += ` --namespace ${ctest.namespace}`;
+
+        // Compile peregrine
+        const f_lean = compile_box(ctest.src, catcryptdir, Lang.CatCrypt, copts);
+        if (typeof f_lean !== "string") {
+          print_result(f_lean, ctest.src);
+          continue;
+        }
+
+        // Golden compare, structural asserts, and (gated) CatCrypt
+        // cross-check + peregrine-eval differential.
+        const notes: string[] = [];
+        const res = run_catcrypt(f_lean, ctest, tmpdir, peregrineCmd, exec_timeout, notes);
+
+        // Report result, then any informational/skip notes the layers
+        // produced (printed after, so they don't break up the
+        // `  <src>: <result>` line the other backends also emit).
+        print_result(res, ctest.src);
+        for (const note of notes) print_line(`    ${note}`);
+      }
+
+      // Fixtures CatCrypt must REJECT (inductives/recursion): a
+      // successful compile here is the test failure.
+      for (var rtest of catcrypt_reject_tests) {
+        process.stdout.write(`  [reject] ${rtest.src}: `);
+
+        const start_reject = Date.now();
+        const f_lean = compile_box(rtest.src, catcryptdir, Lang.CatCrypt, "");
+        if (typeof f_lean === "string") {
+          print_result(
+            { type: "error", reason: "incorrect result", expected: "compile failure (unsupported construct)", actual: `compiled successfully to ${f_lean}` },
+            rtest.src,
+          );
+        } else if (f_lean.reason !== "compile error") {
+          // A timeout is not a rejection — only a clean peregrine
+          // compile error counts as the backend refusing the program.
+          print_result(f_lean, rtest.src);
+        } else {
+          print_result({ type: "success", time: Date.now() - start_reject }, rtest.src);
+          print_line(`    [rejected as expected] ${f_lean.error.trim().split("\n").pop()}`);
+        }
+      }
+      break;
+    }
+
     default:
       print_line("Error: unkown backend");
       exit(1);
@@ -309,7 +368,10 @@ async function main() {
   // Check if the peregrine binary exists
   check_peregrine();
 
-  // For each test configuration run all test programs
+  // For each test configuration run all test programs. When
+  // backend[0] === Lang.CatCrypt, run_tests's `case Lang.CatCrypt` block
+  // ignores the (irrelevant, empty-for-catcrypt) `tests` array below and
+  // routes catcrypt_tests / catcrypt_reject_tests instead — see tests.ts.
   for (var backend of test_configurations) {
     await run_tests(backend[0], backend[1], backend[2], tests);
   }
