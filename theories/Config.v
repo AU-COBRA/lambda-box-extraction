@@ -82,6 +82,7 @@ Section BackendConfig.
   | Wasm   : wasm_config -> backend_config
   | OCaml  : ocaml_config -> backend_config
   | CakeML : cakeml_config -> backend_config
+  | CatCrypt : catcrypt_config -> backend_config
   | Eval   : eval_config -> backend_config
   | AST    : ast_config -> backend_config.
 

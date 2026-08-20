@@ -69,7 +69,8 @@ Require compcert.cfrontend.Csyntax
 
 Separate Extraction Pipeline.peregrine_pipeline Pipeline.peregrine_validate
                     ConfigUtils.empty_rust_config' ConfigUtils.empty_elm_config' ConfigUtils.empty_certirocq_config'
-                    ConfigUtils.empty_ocaml_config' ConfigUtils.empty_cakeml_config' ConfigUtils.empty_config'
+                    ConfigUtils.empty_ocaml_config' ConfigUtils.empty_cakeml_config' ConfigUtils.empty_catcrypt_config'
+                    ConfigUtils.empty_config'
                     Floats.Float32.to_bits Floats.Float.to_bits
                     Floats.Float32.of_bits Floats.Float.of_bits
                     Csyntax

@@ -79,6 +79,18 @@ Instance Deserialize_cakeml_config' : Deserialize cakeml_config' :=
   fun l e =>
     @_from_sexp _ Deserialize_unit l e.
 
+Instance Deserialize_catcrypt_config : Deserialize catcrypt_config :=
+  fun l e =>
+    Deser.match_con "catcrypt_config" []
+      [ ("catcrypt_config", Deser.con4_ Build_catcrypt_config) ]
+      l e.
+
+Instance Deserialize_catcrypt_config' : Deserialize catcrypt_config' :=
+  fun l e =>
+    Deser.match_con "catcrypt_config" []
+      [ ("catcrypt_config", Deser.con4_ Build_catcrypt_config') ]
+      l e.
+
 Instance Deserialize_eval_config : Deserialize eval_config :=
   fun l e =>
     Deser.match_con "eval_config" []
@@ -138,6 +150,7 @@ Instance Deserialize_backend_config : Deserialize backend_config :=
         ("Wasm", Deser.con_ Wasm);
         ("OCaml", Deser.con_ OCaml);
         ("CakeML", Deser.con_ CakeML);
+        ("CatCrypt", Deser.con_ CatCrypt);
         ("Eval", Deser.con_ Eval);
         ("AST", Deser.con_ AST)
       ]
@@ -152,6 +165,7 @@ Instance Deserialize_backend_config' : Deserialize backend_config' :=
         ("Wasm", Deser.con_ Wasm');
         ("OCaml", Deser.con_ OCaml');
         ("CakeML", Deser.con_ CakeML');
+        ("CatCrypt", Deser.con_ CatCrypt');
         ("Eval", Deser.con_ Eval');
         ("AST", Deser.con_ AST')
       ]
@@ -281,6 +295,12 @@ Definition cakeml_config_of_string (s : string) : error + cakeml_config :=
 
 Definition cakeml_config'_of_string (s : string) : error + cakeml_config' :=
   @from_string cakeml_config' Deserialize_cakeml_config' s.
+
+Definition catcrypt_config_of_string (s : string) : error + catcrypt_config :=
+  @from_string catcrypt_config Deserialize_catcrypt_config s.
+
+Definition catcrypt_config'_of_string (s : string) : error + catcrypt_config' :=
+  @from_string catcrypt_config' Deserialize_catcrypt_config' s.
 
 Definition eval_config_of_string (s : string) : error + eval_config :=
   @from_string eval_config Deserialize_eval_config s.

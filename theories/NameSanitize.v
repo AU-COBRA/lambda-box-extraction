@@ -382,6 +382,11 @@ Definition ocaml_sanitizer (s : utf8_string) : string :=
   escape_unicode_chars is_ocaml_start is_ocaml_continue s.
 
 Definition cakeml_sanitizer (s : utf8_string) : string := ocaml_sanitizer s.
+(* CatCrypt output is Lean 4 source.  Lean identifiers admit a richer
+   character set than OCaml's, but the printer already mangles extracted
+   names into ASCII-safe form, so reusing the OCaml sanitizer is
+   conservatively correct. *)
+Definition catcrypt_sanitizer (s : utf8_string) : string := ocaml_sanitizer s.
 Definition elm_sanitizer (s : utf8_string) : string := ocaml_sanitizer s.
 Definition c_sanitizer (s : utf8_string) : string := ocaml_sanitizer s.
 Definition wasm_sanitizer (s : utf8_string) : string := ocaml_sanitizer s.
@@ -500,6 +505,7 @@ Definition get_sanitizer (o : Config.config) : utf8_string -> string :=
   | Config.Elm _ => elm_sanitizer
   | Config.OCaml _ => ocaml_sanitizer
   | Config.CakeML _ => cakeml_sanitizer
+  | Config.CatCrypt _ => catcrypt_sanitizer
   | Config.C _ => c_sanitizer
   | Config.Wasm _ => wasm_sanitizer
   (* Name sanitizing not necessary here *)
