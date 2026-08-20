@@ -61,6 +61,11 @@ let write_cakeml_res opts f p =
   write_res f (fun f ->
     output_string f (caml_string_of_bytestring (snd p)))
 
+let write_catcrypt_res opts f p =
+  let f = get_out_file opts f "lean" in
+  let p = caml_string_of_bytestring p in
+  write_res f (fun f -> output_string f p)
+
 let write_ast_res opts f p =
   let f = get_out_file opts f "ast" in
   let p = caml_string_of_bytestring p in
@@ -90,6 +95,7 @@ let write_program opts f p =
   | Pipeline.ElmProgram p -> write_elm_res opts f p
   | Pipeline.OCamlProgram p -> write_ocaml_res opts f p
   | Pipeline.CakeMLProgram p -> write_cakeml_res opts f p
+  | Pipeline.CatCryptProgram p -> write_catcrypt_res opts f p
   | Pipeline.CProgram p -> write_c_res opts f p
   | Pipeline.WasmProgram p -> write_wasm_res opts f p
   | Pipeline.EvalProgram p -> cprint_endline p
@@ -201,6 +207,15 @@ let compile_ocaml opts eopts f_prog =
 
 let compile_cakeml opts eopts f_prog =
   let b_opts = ConfigUtils.CakeML' ConfigUtils.empty_cakeml_config' in
+  compile_backend b_opts opts eopts f_prog
+
+let compile_catcrypt opts eopts namespace def_name no_mask63 scaffold f_prog =
+  let b_opts = ConfigUtils.CatCrypt' {
+      ConfigUtils.catcrypt_namespace' = Option.map bytestring_of_caml_string namespace;
+      ConfigUtils.catcrypt_def_name'  = Option.map bytestring_of_caml_string def_name;
+      ConfigUtils.catcrypt_mask63'    = if no_mask63 then Some false else None;
+      ConfigUtils.catcrypt_scaffold'  = if scaffold then Some true else None;
+    } in
   compile_backend b_opts opts eopts f_prog
 
 let compile_c opts copts eopts f_prog =
