@@ -13,6 +13,7 @@ The table below summarises supported the backends
 | CakeML       | untyped | ✓ | ✓ | Serialized AST             | ✗ | GC |
 | Rust         | typed   | ✗ | ✗ | Source language            | ✓ | Bump allocator, no GC |
 | Elm          | typed   | ✗ | ✗ | Source language            | ✓ | - |
+| CatCrypt     | untyped | ✗ | ✗ | Lean 4 source (`NamedSSA`) | ✓ | - |
 | AST (debug)  | either  | ✓ | ✓ | Serialized AST             | ✗ | - |
 | Eval (debug) | either  | ✓ | ✗ | -                          | ✗ | -  |
 
@@ -64,6 +65,22 @@ The backend is located in [`peregrine-project/rocq-typed-extraction`](https://gi
 Output
 * A single file; written to `<file>.elm` by the CLI.
 * The result has no external dependencies and is compiled with the [Elm compiler](https://guide.elm-lang.org/install/elm).
+
+## CatCrypt
+
+CatCrypt backend extracting to a [CatCrypt-compiler](https://github.com/CatCrypt/catcrypt-compiler) `NamedSSA` value — a flat, 64-bit static-single-assignment representation (`CatCrypt.Crypto.SecureCompilation.ComBuilder`). CatCrypt is a verified crypto compiler; it consumes the generated file as ordinary Lean 4 source, not through a CLI or its own file format.
+
+Only a small, straight-line fragment of untyped $\lambda_\square$ is supported: a prefix of lambdas, `tLetIn`, applications of remapped native-integer (`PrimInt63`) constants, and `tPrim` integer literals. Anything else — pattern matches, inductives, recursion, closures, or a constant with no remapping — is rejected with a descriptive error rather than silently mistranslated.
+
+A built-in table remaps the Rocq `PrimInt63` operations `add`/`sub`/`mul`/`land`/`lor`/`lxor`/`lsl`/`lsr` (shift amounts must be literal, `0`–`63`); user-supplied `constant_remappings` can override or extend this table using the same vocabulary, plus `mulhi` (only available when masking is disabled). By default every `add`/`sub`/`mul`/`lsl` result is masked with `2^63 - 1`, giving exact Uint63 (mod `2^63`) semantics under the precondition that inputs are below `2^63`; `--no-mask63` switches to raw mod `2^64` arithmetic on the full 64-bit words.
+
+Output — a single `.lean` file defining a `NamedSSA` term. The CLI:
+```
+peregrine catcrypt FILE [-o out.lean] [--namespace NS] [--def-name NAME] [--no-mask63] [--scaffold]
+```
+`--scaffold` appends a demo block (building the term, rendering it to ARM assembly, and an `#eval`) that runs as-is inside a CatCrypt checkout via `lake env lean out.lean`.
+
+Verification status: the backend itself is unverified — an ordinary in-tree Rocq implementation with no correctness proof relating it to $\lambda_\square$ semantics. On the CatCrypt side, the emitted `NamedSSA` is covered by `build_preserves_denote` and `build_preserves_ComOK`. Cross-checking tests against the CatCrypt compiler are gated on the `CATCRYPT_DIR` environment variable, since that repository is private.
 
 ## Debug backends
 

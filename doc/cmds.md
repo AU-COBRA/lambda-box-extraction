@@ -23,6 +23,7 @@ Valid values for `BACKEND` are:
 * `cakeml`
 * `rust`
 * `elm`
+* `catcrypt`
 * `ast`
 * `eval`
 

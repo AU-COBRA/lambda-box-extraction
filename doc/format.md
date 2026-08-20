@@ -266,6 +266,7 @@ The `attributes_config` payload accepted via `--attributes` is the 5-element sub
 (Wasm   <wasm_config>)
 (OCaml  <ocaml_config>)
 (CakeML <cakeml_config>)
+(CatCrypt <catcrypt_config>)
 (Eval   <eval_config>)
 (AST    <ast_config>)
 ```
