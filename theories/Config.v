@@ -43,6 +43,7 @@ Section BackendConfig.
   Definition c_config : Type := certirocq_config.
 
   Definition wasm_config : Type := certirocq_config.
+  Definition llvm_config : Type := certirocq_config.
 
   Record ocaml_config := {
     program_type : Malfunction.Serialize.program_type;
@@ -73,6 +74,7 @@ Section BackendConfig.
   | Elm    : elm_config -> backend_config
   | C      : c_config -> backend_config
   | Wasm   : wasm_config -> backend_config
+  | LLVM   : llvm_config -> backend_config
   | OCaml  : ocaml_config -> backend_config
   | CakeML : cakeml_config -> backend_config
   | Eval   : eval_config -> backend_config
@@ -135,6 +137,7 @@ Section GeneralConfig.
       unboxing_c       : phases_config;
       dearg_ctors_c    : phases_config;
       dearg_consts_c   : phases_config;
+      specialize_instances_c : phases_config;
     }.
 
   Record erasure_phases := {
@@ -145,6 +148,9 @@ Section GeneralConfig.
       unboxing       : bool;
       dearg_ctors    : bool;
       dearg_consts   : bool;
+      (* Instance/dictionary specialization (Peregrine-local unsafe pass,
+         see erasure/EInstanceSpecialize.v). *)
+      specialize_instances : bool;
     }.
 
   Record config := {

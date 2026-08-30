@@ -262,6 +262,10 @@ Proof.
     simpl_bytes.
     rewrite complete_class.
     reflexivity.
+  - cbn -[Deserialize_certirocq_config].
+    simpl_bytes.
+    rewrite complete_class.
+    reflexivity.
   - cbn -[Deserialize_ocaml_config].
     simpl_bytes.
     rewrite complete_class.
@@ -290,6 +294,10 @@ Proof.
     rewrite complete_class.
     reflexivity.
   - cbn -[Deserialize_elm_config'].
+    simpl_bytes.
+    rewrite complete_class.
+    reflexivity.
+  - cbn -[Deserialize_certirocq_config'].
     simpl_bytes.
     rewrite complete_class.
     reflexivity.
@@ -413,7 +421,7 @@ Proof.
   intros l o.
   cbn -[Deserialize_bool].
   simpl_bytes.
-  rewrite 7!complete_class.
+  rewrite 8!complete_class.
   destruct o; cbn.
   reflexivity.
 Qed.
@@ -424,7 +432,7 @@ Proof.
   intros l o.
   cbn -[Deserialize_bool].
   simpl_bytes.
-  rewrite 7!complete_class.
+  rewrite 8!complete_class.
   destruct o; cbn.
   reflexivity.
 Qed.

@@ -3,6 +3,7 @@ From MetaRocq.Erasure Require ExAst.
 From MetaRocq.Utils Require Import ResultMonad.
 From MetaRocq.Utils Require Import bytestring.
 From Peregrine Require Import Utils.
+From Peregrine Require Import EHindleyMilner.
 
 
 
@@ -25,8 +26,13 @@ Definition PAst_to_EAst (ast : PAst) : result' EAst.program :=
 
 Definition PAst_to_ExAst (ast : PAst) : result' ExAst.global_env :=
   match ast with
-  (* TODO: fix once we have type inference *)
-  | Untyped env _ => Err "Cannot convert untyped program to a typed program"%bs
+  (* Untyped (lambda-box) input is bridged to typed (lambda-box-typed) by the
+     verified Hindley-Milner section [infer]: [trans_env (infer empty_sigs env)
+     = env] (EHindleyMilner.infer_section), so erasure recovers the original
+     program.  [empty_sigs] supplies no datatype signatures; inference falls
+     back to [TAny] where a type is undetermined, which the section law tolerates
+     since the [box_type] annotations are erased away. *)
+  | Untyped env _ => Ok (infer empty_sigs env)
   | Typed env (Some t) => Ok env (* TODO: add t to env, with a fresh name or hardcoded main? *)
   | Typed env None => Ok env
   end.

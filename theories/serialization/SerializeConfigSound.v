@@ -382,6 +382,11 @@ Proof.
     apply sound_class in Ea1.
     rewrite <- Ea1.
     reflexivity.
+  - destruct He as [es [<- He]].
+    sound_field He.
+    apply sound_class in Ea1.
+    rewrite <- Ea1.
+    reflexivity.
 Qed.
 
 Instance Sound_backend_config' : SoundClass backend_config'.
@@ -390,6 +395,11 @@ Proof.
   intros l e n He.
   apply sound_match_con in He.
   destruct He as [He | He]; elim_Exists He.
+  - destruct He as [es [<- He]].
+    sound_field He.
+    apply sound_class in Ea1.
+    rewrite <- Ea1.
+    reflexivity.
   - destruct He as [es [<- He]].
     sound_field He.
     apply sound_class in Ea1.
@@ -567,9 +577,10 @@ Proof.
   apply sound_class in Ea4.
   apply sound_class in Ea5.
   apply sound_class in Ea6.
+  apply sound_class in Ea7.
   unfold to_sexp, Serialize_erasure_phases.
   cbn.
-  rewrite <- Ea0, <- Ea1, <- Ea2, <- Ea3, <- Ea4, <- Ea5, <- Ea6.
+  rewrite <- Ea0, <- Ea1, <- Ea2, <- Ea3, <- Ea4, <- Ea5, <- Ea6, <- Ea7.
   reflexivity.
 Qed.
 
@@ -588,9 +599,10 @@ Proof.
   apply sound_class in Ea4.
   apply sound_class in Ea5.
   apply sound_class in Ea6.
+  apply sound_class in Ea7.
   unfold to_sexp, Serialize_erasure_phases'.
   cbn.
-  rewrite <- Ea0, <- Ea1, <- Ea2, <- Ea3, <- Ea4, <- Ea5, <- Ea6.
+  rewrite <- Ea0, <- Ea1, <- Ea2, <- Ea3, <- Ea4, <- Ea5, <- Ea6, <- Ea7.
   reflexivity.
 Qed.
 

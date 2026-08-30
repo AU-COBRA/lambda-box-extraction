@@ -23,14 +23,99 @@ Definition default_rust_config := {|
   rust_default_attributes := "#[derive(Debug, Clone)]";
 |}.
 
+(** GMP runtime preamble: helpers + eliminator macros over [rug::Integer],
+    the GMP analogue of the u64 helpers hardcoded in PluginExtract.v.  Place
+    this in [rust_preamble_top] (see [gmp_rust_config]).  Requires the [rug]
+    crate: add [rug = "1"] to the generated Cargo.toml.  Validate against a
+    real build — the eliminator/predecessor paths are the least-tested. *)
+Definition rust_gmp_preamble : string :=
+  String.concat MRString.nl [
+  "use rug::Integer;";
+  "";
+  "fn __nat_succ(x: Integer) -> Integer { x + 1 }";
+  "macro_rules! __nat_elim {";
+  "  ($zcase:expr, $pred:ident, $scase:expr, $val:expr) => {";
+  "    { let v = $val; if v == 0 { $zcase } else { let $pred = Integer::from(&v - 1); $scase } }";
+  "  }";
+  "}";
+  "macro_rules! __andb { ($b1:expr, $b2:expr) => { $b1 && $b2 } }";
+  "macro_rules! __orb { ($b1:expr, $b2:expr) => { $b1 || $b2 } }";
+  "";
+  "fn __pos_onebit(x: Integer) -> Integer { x * 2 + 1 }";
+  "fn __pos_zerobit(x: Integer) -> Integer { x * 2 }";
+  "macro_rules! __pos_elim {";
+  "  ($p:ident, $onebcase:expr, $p2:ident, $zerobcase:expr, $onecase:expr, $val:expr) => {";
+  "    { let n = $val;";
+  "      if n == 1 { $onecase }";
+  "      else if Integer::from(&n & Integer::from(1)) == 0 { let $p2 = Integer::from(&n >> 1u32); $zerobcase }";
+  "      else { let $p = Integer::from(&n >> 1u32); $onebcase } }";
+  "  }";
+  "}";
+  "";
+  "fn __N_frompos(z: Integer) -> Integer { z }";
+  "macro_rules! __N_elim {";
+  "  ($zero_case:expr, $p:ident, $pos_case:expr, $val:expr) => {";
+  "    { let $p = $val; if $p == 0 { $zero_case } else { $pos_case } }";
+  "  }";
+  "}";
+  "";
+  "fn __Z_frompos(z: Integer) -> Integer { z }";
+  "fn __Z_fromneg(z: Integer) -> Integer { -z }";
+  "macro_rules! __Z_elim {";
+  "  ($zero_case:expr, $p:ident, $pos_case:expr, $p2:ident, $neg_case:expr, $val:expr) => {";
+  "    { let n = $val;";
+  "      if n == 0 { $zero_case }";
+  "      else if n < 0 { let $p2 = Integer::from(-&n); $neg_case }";
+  "      else { let $p = n; $pos_case } }";
+  "  }";
+  "}"
+  ].
+
+(** As [default_rust_config] but with the GMP numeric preamble wired into the
+    top preamble.  Pair this with the GMP constant/inductive remaps (the config
+    counterparts of ExtrRustGMP.v) to make [compile_rust] emit GMP arithmetic. *)
+Definition gmp_rust_config := {|
+  rust_preamble_top       := rust_gmp_preamble;
+  rust_preamble_program   := "";
+  rust_term_box_symbol    := "()";
+  rust_type_box_symbol    := "()";
+  rust_any_type_symbol    := "()";
+  rust_print_full_names   := true;
+  rust_default_attributes := "#[derive(Debug, Clone)]";
+|}.
+
+(* [dearg_ctors_c]: whether to *trim* trailing dead bits off inductive
+   constructor dearging masks (an eta-expansion-avoidance micro-opt in
+   MetaRocq's typed dearging pass), as opposed to whether dearging runs at
+   all -- dead-argument analysis always runs regardless of this flag.
+   Left [Compatible true] (the trim), a fully-live (all-"keep") constructor
+   mask gets trimmed all the way down to the empty mask ([trim_end false]
+   strips *all* trailing [false] bits, and an all-live mask is all [false]).
+   [Optimize.check_oib_masks] then rejects that empty mask because its
+   length no longer equals the constructor's recorded arity (a strict `==`,
+   unlike the prefix-tolerant checks used elsewhere for constant masks and
+   for applying case-branch masks). That single rejection fails
+   [valid_masks_env] for the *whole program* (dearging is an all-or-nothing,
+   whole-environment check -- see [Transforms.dearg_diagnose]), which is why
+   completely ordinary types like [nat]/[list]/[prod] (whose "S"/"cons"/
+   "pair" constructors have no dead non-parameter fields to trim) silently
+   disabled dearging outright: every erased type-argument value-param
+   (Peregrine phase P4's "A: ()") stayed in the generated Rust for every
+   benchmark. Turning trimming off avoids ever producing such an
+   empty-but-should-be-full-length mask; per-argument/per-field dead-code
+   removal (both constant args, via [dearg_consts_c], and constructor
+   fields) is unaffected -- only the harmless trailing-bits compaction is
+   skipped. Confirmed empirically with the `deargdiag` diagnostic and a
+   5/5 rustb correctness re-run (see phase P4 report). *)
 Definition rust_phases := {|
   implement_box_c  := Compatible false;
   implement_lazy_c := Compatible false;
   cofix_to_laxy_c  := Compatible false;
   betared_c        := Compatible false;
-  unboxing_c       := Compatible false;
-  dearg_ctors_c    := Compatible true;
+  unboxing_c       := Compatible true;
+  dearg_ctors_c    := Compatible false;
   dearg_consts_c   := Compatible true;
+  specialize_instances_c := Compatible false;
 |}.
 
 

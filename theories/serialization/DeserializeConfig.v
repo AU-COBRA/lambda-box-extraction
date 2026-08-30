@@ -136,6 +136,7 @@ Instance Deserialize_backend_config : Deserialize backend_config :=
         ("Elm", Deser.con_ Elm);
         ("C", Deser.con_ C);
         ("Wasm", Deser.con_ Wasm);
+        ("LLVM", Deser.con_ LLVM);
         ("OCaml", Deser.con_ OCaml);
         ("CakeML", Deser.con_ CakeML);
         ("Eval", Deser.con_ Eval);
@@ -150,6 +151,7 @@ Instance Deserialize_backend_config' : Deserialize backend_config' :=
         ("Elm", Deser.con_ Elm');
         ("C", Deser.con_ C');
         ("Wasm", Deser.con_ Wasm');
+        ("LLVM", Deser.con_ LLVM');
         ("OCaml", Deser.con_ OCaml');
         ("CakeML", Deser.con_ CakeML');
         ("Eval", Deser.con_ Eval');
@@ -216,13 +218,13 @@ Instance Deserialize_custom_attributes : Deserialize custom_attributes :=
 Instance Deserialize_erasure_phases : Deserialize erasure_phases :=
   fun l e =>
     Deser.match_con "erasure_phases" []
-      [ ("erasure_phases", Deser.con7_ Build_erasure_phases) ]
+      [ ("erasure_phases", Deser.con8_ Build_erasure_phases) ]
       l e.
 
 Instance Deserialize_erasure_phases' : Deserialize erasure_phases' :=
   fun l e =>
     Deser.match_con "erasure_phases" []
-      [ ("erasure_phases", Deser.con7_ Build_erasure_phases') ]
+      [ ("erasure_phases", Deser.con8_ Build_erasure_phases') ]
       l e.
 
 Instance Deserialize_config : Deserialize config :=
