@@ -135,6 +135,8 @@ Section GeneralConfig.
       unboxing_c       : phases_config;
       dearg_ctors_c    : phases_config;
       dearg_consts_c   : phases_config;
+      specialize_instances_c : phases_config;
+      cse_c            : phases_config;
     }.
 
   Record erasure_phases := {
@@ -145,6 +147,12 @@ Section GeneralConfig.
       unboxing       : bool;
       dearg_ctors    : bool;
       dearg_consts   : bool;
+      (* Instance/dictionary specialization (Peregrine-local unsafe pass,
+         see erasure/EInstanceSpecialize.v). *)
+      specialize_instances : bool;
+      (* Common-subexpression elimination (Peregrine-local unsafe pass,
+         see erasure/ECommonSubexpr.v). *)
+      cse            : bool;
     }.
 
   Record config := {

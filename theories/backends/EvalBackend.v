@@ -36,6 +36,8 @@ Definition eval_phases := {|
   unboxing_c       := Compatible false;
   dearg_ctors_c    := Compatible false;
   dearg_consts_c   := Compatible false;
+  specialize_instances_c := Compatible false;
+  cse_c            := Compatible false;
 |}.
 
 
